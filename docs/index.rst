@@ -15,9 +15,9 @@ Makefile, see `.travis.yml` for additional requirements if things fail).
 To setup the environment run:
 
 .. code-block:: bash
-    #TODO: amend this
-    git clone --recursive https://git/research/pomoxis.git
-    cd pomoxis
+    #TODO: fill in <project> x2
+    git clone --recursive https://git/research/<project>.git
+    cd <project>
     make install
     . ./venv/bin/activate
 
