@@ -36,7 +36,7 @@ dir_path = os.path.dirname(__file__)
 install_requires = []
 with open(os.path.join(dir_path, 'requirements.txt')) as fh:
     reqs = (
-        r.strip()
+        r.split('#')[0].strip()
         for r in fh.read().splitlines() if not r.startswith('#')
     )
     for req in reqs:
