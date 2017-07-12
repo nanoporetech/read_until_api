@@ -36,15 +36,15 @@ dir_path = os.path.dirname(__file__)
 install_requires = []
 with open(os.path.join(dir_path, 'requirements.txt')) as fh:
     reqs = (
-        r.split('#')[0].strip()
-        for r in fh.read().splitlines() if not r.strip().startswith('#')
+        r.strip()
+        for r in fh.read().splitlines() if not r.startswith('#')
     )
-    # Allow specifying git repos
     for req in reqs:
+        if req == '':
+            continue
         if req.startswith('git+https'):
-            req.split('/')[-1].split('@')[0]
-    install_requires.append(req)
-
+            req = req.split('/')[-1].split('@')[0]
+        install_requires.append(req)
 
 extra_requires = {
     #TODO: any optional requirements
