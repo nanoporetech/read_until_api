@@ -1,6 +1,19 @@
 [//]: 
-Read Until Raw
-==============
+Read Until2
+===========
+
+Temporary Build Instructions
+----------------------------
+
+    make -f MakegRPC.mk build
+    make install
+
+This will glone the .proto files and try to build them (with a lot of nastiness)
+Included are modified versions of the files `minknow/rpc/*service.py`: nasty
+python2 relative imports have been amended and additional imports of `*pb_grpc`
+have been added. All of this needs fixing upstream.
+
+
 
 
 [//]: 
