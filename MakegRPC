@@ -1,0 +1,23 @@
+
+VENV=rpc_venv
+venv: ${VENV}/bin/activate
+IN_VENV=. ./${VENV}/bin/activate
+OUTDIR=pyrpc
+ 
+${VENV}/bin/activate:
+	test -d ${VENV} || virtualenv ${VENV} --python=python3
+	${IN_VENV} && pip install pip --upgrade
+	${IN_VENV} && pip install protobuf
+	${IN_VENV} && pip install grpcio
+	${IN_VENV} && pip install grpcio-tools
+ 
+clean:
+	rm -rf ${VENV} ${OUTDIR} protobuff minknow/rpc/*_pb2*
+    
+ 
+ 
+build: clean venv
+	git clone https://git.oxfordnanolabs.local/minknow/protobuff
+	cd protobuff/minknow && mkdir ${OUTDIR}
+	${IN_VENV} && cd protobuff/minknow && python -m grpc_tools.protoc --proto_path=. --python_out=pyrpc --grpc_python_out=pyrpc acquisition.proto analysis_configuration.proto data.proto device.proto instance.proto keystore.proto log.proto minion_device.proto production.proto promethion_device.proto protocol.proto reads.proto rpc_options.proto
+	cp -r protobuff/minknow/pyrpc/*_pb2* minknow/rpc/

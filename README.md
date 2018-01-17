@@ -1,14 +1,20 @@
-[//]: # (TODO: Add a title)
-TITLE
-=====
+[//]: 
+Read Until Raw
+==============
 
-[//]: # (TODO: fill in <project x2>)
-[![Build Status](https://travis-ci.org/nanoporetech/<project>.svg?branch=master)](https://travis-ci.org/nanoporetech/<project>)
 
-[//]: # (TODO: Add a description)
+[//]: 
+[![Build Status](https://travis-ci.org/nanoporetech/read_until.svg?branch=master)](https://travis-ci.org/nanoporetech/read_until)
 
-[//]: # (TODO: fill in <project>)
-Documentation can be found at https://nanoporetech.github.io/<project>/.
+[//]: 
+The Read Until API provides a mechanism for a client script to connect to a
+MinKNOW server. The server can be asked to push a raw data to the client 
+script in real-time. The data can be analysed in the way most fit for purpose, 
+and a return call can be made to the server to unblock the read in progress.
+
+[//]: 
+Documentation can be found at https://nanoporetech.github.io/read_until/.
+
 
 Build
 -----
@@ -19,9 +25,8 @@ environment.
 
 To setup the environment run:
 
-    [//]: # (TODO: fill in <project> x2)
-    git clone --recursive https://github.com/nanoporetech/<project>.git
-    cd <project>
+    git clone --recursive https://github.com/nanoporetech/read_until
+    cd read_until 
     make install
     . ./venv/bin/activate
 

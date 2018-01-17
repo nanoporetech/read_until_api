@@ -1,8 +1,7 @@
-.. TODO fill in name
-Welcome to {}'s documentation!
+Welcome to read_until_raw's documentation!
 ==================================
 
-.. TODO: add description
+
 
 Installation
 ------------
@@ -15,9 +14,8 @@ Makefile, see `.travis.yml` for additional requirements if things fail).
 To setup the environment run:
 
 .. code-block:: bash
-    #TODO: fill in <project> x2
-    git clone --recursive https://git/research/<project>.git
-    cd <project>
+    git clone --recursive https://git/research/read_until_raw.git
+    cd read_until_raw
     make install
     . ./venv/bin/activate
 
@@ -30,7 +28,6 @@ Contents
    :maxdepth: 2
 
    examples
-.. TODO: add more pages
 
 Full API reference
 ------------------
@@ -38,8 +35,7 @@ Full API reference
 .. toctree::
    :maxdepth: 3
       
-   pomoxis
-.. TODO: change name above
+   read_until_raw 
 
 Indices and tables
 ------------------

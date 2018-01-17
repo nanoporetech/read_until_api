@@ -11,10 +11,9 @@ from setuptools.command.install import install
 import pkg_resources
 
 
-#TODO: fill in these
-__pkg_name__ = ''
-__author__ = ''
-__description__ = ''
+__pkg_name__ = 'read_until'
+__author__ = 'cwright'
+__description__ = 'Read Until API'
 
 
 __path__ = os.path.dirname(__file__)
@@ -46,21 +45,8 @@ with open(os.path.join(dir_path, 'requirements.txt')) as fh:
             req = req.split('/')[-1].split('@')[0]
         install_requires.append(req)
 
-extra_requires = {
-    #TODO: any optional requirements
-}
-
-
-
+extra_requires = {}
 extensions = []
-#TODO: compile any extensions
-#extensions.append(Extension(
-#    'name',
-#    sources=[]
-#    include_dirs=[],
-#    extra_compile_args=['-pedantic', '-Wall', '-std=c99', '-march=native', '-ffast-math', '-DUSE_SSE2', '-DNDEBUG'],
-#    libraries=[] #e.g. 'blas'
-#))
 
 
 setup(
@@ -79,16 +65,9 @@ setup(
     packages=find_packages(exclude=['*.test', '*.test.*', 'test.*', 'test']),
     package_data={},
     zip_safe=False,
-    data_files=[
-        #TODO: Probably won't have these, use package_data in most cases 
-    ],
     entry_points={
         'console_scripts': [
-            #TODO: add entry points
-            #'name' = {}.package.module:function'.format(__pkg_name__)
+            'run_read_until = {}.run_read_until:main'.format(__pkg_name__)
         ]
     },
-    scripts=[
-        #TODO: Probably won't have these, use entry_points
-    ]
 )

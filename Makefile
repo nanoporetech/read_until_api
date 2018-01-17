@@ -9,7 +9,7 @@ venv/bin/activate:
 	${IN_VENV} && pip install pip --upgrade
 	${IN_VENV} && pip install numpy # needs to get done before other things
 
-install: venv | $(addprefix $(BINCACHEDIR)/, $(BINARIES))
+install: venv
 	${IN_VENV} && pip install -r requirements.txt && python setup.py install
 
 
