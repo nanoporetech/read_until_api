@@ -16,13 +16,13 @@ class ReadUntil(object):
 
         self.connection = minknow.rpc.Connection(port=8004)
         self.msgs = self.connection.data._pb
-        self.device = minknow.Device(connection)
+        self.device = minknow.Device(self.connection)
 
-        self.signal_dtype = device.numpy_data_types.calibrated_signal
+        self.signal_dtype = self.device.numpy_data_types.calibrated_signal
         self.action_queue = None
 
 
-    def run(self, run_time=60)
+    def run(self, run_time=30):
         self.logger.info("Running for {} seconds.".format(time))
         self.action_queue = queue.Queue()
         reads = self.connection.data.get_live_reads(
@@ -38,7 +38,8 @@ class ReadUntil(object):
 
 
     def _put_action(self, read_channel, read_number, action):
-        action_id = str(uuid.uuid4()
+        action_id = str(uuid.uuid4())
+        my_action = action
         action_kwargs = {
             'action_id': action_id,
             'channel': read_channel,
@@ -47,7 +48,7 @@ class ReadUntil(object):
         if action == 'stop_further_data':
             action_kwargs[action] = self.msgs.GetLiveReadsRequest.StopFurtherData()
         elif action == 'unblock':
-            action_kwargs[action] = self.msgs.GetLiveReadsRequest.Unblock()
+            action_kwargs[action] = self.msgs.GetLiveReadsRequest.UnblockAction()
         else:
             raise ValueError("'action' parameter must must be 'stop_further_data' or 'unblock'.")
         
@@ -56,12 +57,12 @@ class ReadUntil(object):
             actions=self.msgs.GetLiveReadsRequest.Actions(actions=[action])
         )
         self.action_queue.put(action_group)
-        self.logger.debug('Action {} on channel {}, read {}: {}.'.format(
-            action_id, read_channel, read_number
+        self.logger.debug('Action {} on channel {}, read {} : {}'.format(
+            action_id, read_channel, read_number, my_action
         ))
 
 
-    def _runner(self, run_time, first_channel=1, last_channel=512, min_chunk_size=1000)
+    def _runner(self, run_time, first_channel=1, last_channel=512, min_chunk_size=1000):
         timeout_pt = time.time() + run_time
 
         self.logger.info("Sending init command")
@@ -85,11 +86,11 @@ class ReadUntil(object):
         self.logger.info("Stream finished after timeout.")
 
 
-    def unblock_read(self, read_channel, read_number):
+    def _unblock_read(self, read_channel, read_number):
         self._put_action(read_channel, read_number, 'unblock')
 
 
-    def stop_receiving_read(self, read_channel, read_number):
+    def _stop_receiving_read(self, read_channel, read_number):
         self._put_action(read_channel, read_number, 'stop_further_data')
 
 
@@ -115,9 +116,9 @@ class ReadUntil(object):
 
                 typed_data = numpy.fromstring(read.raw_data, self.signal_dtype)
                 raw_data_bytes += len(read.raw_data)
-                read.raw_data = ""
-                #logging.info("Got live read data for channel {}-{}: {} samples behind head, {} processed"
-                #     .format(read_channel, read.number, progress.raw_per_channel.acquired-read.chunk_start_sample, progress.raw_per_channel.processed))
+                read.raw_data = bytes("", 'utf-8')
+                logging.info("Got live read data for channel {}-{}: {} samples behind head, {} processed"
+                     .format(read_channel, read.number, progress.raw_per_channel.acquired-read.chunk_start_sample, progress.raw_per_channel.processed))
 
                 read_count += 1
                 samples_behind += (progress.raw_per_channel.acquired - read.chunk_start_sample)
@@ -129,9 +130,9 @@ class ReadUntil(object):
                     logging.info("raw {}".format(typed_data[0:5]))
 
                 if read_channel % 2 == 0:
-                    self._unblock_read(read_channel, read_number)
+                    self._unblock_read(read_channel, read.number)
                 else:
-                    self._stop_receiving_read(read_channel, read_number)
+                    self._stop_receiving_read(read_channel, read.number)
 
             now = time.time()
             if last_msg_time + 1 < now:
@@ -141,8 +142,10 @@ class ReadUntil(object):
                 raw_data_bytes = 0
                 last_msg_time = now
 
-            #if len(reads_chunk.action_reponses):
-            #    logging.info("Got responses {}".format(reads_chunk.action_reponses))
+            if len(reads_chunk.action_reponses):
+                logging.info("Got responses {}".format(reads_chunk.action_reponses))
+                for response in reads_chunk.action_reponses:
+                    print(response.response)
 
 
 def main():
