@@ -1,4 +1,3 @@
-venv
 *.pyd
 *.pyc
 *.so
@@ -14,3 +13,8 @@ tmp/
 *.gz
 *__pycache__*
 *.fna
+rpc_venv
+protobuff
+minknow/rpc/*_pb2.py
+minknow/rpc/*_pb2_grpc.py
+
