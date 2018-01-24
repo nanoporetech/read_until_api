@@ -257,7 +257,6 @@ class ReadUntil(object):
                 raw_data_bytes += len(read.raw_data)
 
                 self.data_queue[read_channel] = read
-                self.stop_receiving_read(read_channel, read.number)
 
             now = time.time()
             if last_msg_time + 1 < now:
