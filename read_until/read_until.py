@@ -1,8 +1,9 @@
 import argparse
-from collections import Counter
+from collections import Counter, OrderedDict
 import logging
 import queue
 import sys
+from threading import Lock
 import time
 import uuid
 
@@ -11,13 +12,74 @@ import numpy
 import minknow
 
 
+class Cache(object):
+    def __init__(self, size=100):
+        """An ordered dictionary of a maximum size.
+
+        :param size: maximum number of entries, when more entries are added
+           the oldest current entries will be removed.
+
+        """
+
+        if size < 1:
+            raise AttributeError("'size' must be >1.")
+        self.size = size
+        self.dict = OrderedDict()
+        self.lock = Lock()
+
+
+    def __getitem__(self, key):
+        with self.lock:
+            return self.dict[key]
+
+
+    def __setitem__(self, key, value):
+        with self.lock:
+            while len(self.dict) >= self.size:
+                self.dict.popitem(last=False)
+            if key in self.dict:
+                del self.dict[key]
+            self.dict[key] = value
+
+
+    def __delitem__(self, key):
+        with self.lock:
+            del self.dict[key]
+
+
+    def __len__(self):
+        return len(self.dict)
+
+
+    def popitem(self, last=True):
+        """Return the newest (or oldest) entry.
+
+        :param last: if `True` return the newest entry, else the oldest.
+
+        """
+        with self.lock:
+            return self.dict.popitem(last=last)
+
+
+    def popitems(self, items, last=True):
+        """Return a list of the newest (or oldest) entries.
+
+        :param last: if `True` return the newest entry, else the oldest.
+
+        """
+        with self.lock:
+            return [self.dict.popitem(last=last) for _ in range(items)]
+
+
 class ReadUntil(object):
     ALLOWED_MIN_CHUNK_SIZE = 4000
 
-    def __init__(self, mk_rpc_port=8004):
+    def __init__(self, mk_rpc_port=8004, cache_size=512):
         """A basic Read Until client.
 
         :param mk_rpc_port: MinKNOW gRPC port.
+        :param cache_size: maximum number of read chunks to cache from
+            gRPC stream.
 
         """
         self.logger = logging.getLogger('ReadUntil')
@@ -29,7 +91,13 @@ class ReadUntil(object):
         self.device = minknow.Device(self.connection)
 
         self.signal_dtype = self.device.numpy_data_types.calibrated_signal
-        self.action_queue = None
+        self.cache_size = cache_size
+
+        # the action_queue is used to store unblock/stop_receiving_data
+        #    requests before they are put on the gRPC stream.
+        self.action_queue = queue.Queue()
+        # the data_queue is used to store the latest chunk per channel
+        self.data_queue = Cache(size=self.cache_size)
 
 
     def run(self, runner_kwargs={'run_time':30}):
@@ -38,11 +106,6 @@ class ReadUntil(object):
         :param runner_kwargs: kwargs for ._runner() method.
 
         """
-
-        # the action_queue is used to store unblock/stop_receiving_data
-        #    requests before they are put on the gRPC stream.
-        self.action_queue = queue.Queue()
-
         # .get_live_reads() takes an iterable of requests and generates
         #    raw data chunks and responses to our requests: the iterable
         #    thereby controls the lifetime of the stream. ._runner() as
@@ -56,16 +119,36 @@ class ReadUntil(object):
         #    placing action requests on the queue and logging the responses
         self._process_reads(reads)
 
-        self.action_queue = None
-        logging.info("Finished run.")
+        # reset these for good measure
+        self.action_queue = queue.Queue()
+        self.data_queue = Cache(size=self.cache_size)
+        self.logger.info("Finished run.")
 
 
     def aquisition_progress(self):
         """Get MinKNOW data acquisition progress.
 
         :returns: a structure with attributes .acquired and .processed.
+
         """
         return self.connection.acquisition.get_progress().raw_per_channel
+
+
+    def get_read_chunks(self, batch_size=1, last=True):
+        """Get a read chunk, removing it from the queue.
+
+        :param batch_size: number of reads.
+        :param last: get the most recent (else oldest)?
+        """
+        return self.data_queue.popitems(items=batch_size, last=True)
+
+
+    def unblock_read(self, read_channel, read_number):
+        self._put_action(read_channel, read_number, 'unblock')
+
+
+    def stop_receiving_read(self, read_channel, read_number):
+        self._put_action(read_channel, read_number, 'stop_further_data')
 
 
     def _put_action(self, read_channel, read_number, action):
@@ -114,7 +197,7 @@ class ReadUntil(object):
         timeout_pt = time.time() + run_time
 
         if min_chunk_size > self.ALLOWED_MIN_CHUNK_SIZE:
-            self.logger.info("Reducing min_chunk_size to {}".format(self.ALLOWED_MIN_CHUNK_SIZE))
+            self.logger.warning("Reducing min_chunk_size to {}".format(self.ALLOWED_MIN_CHUNK_SIZE))
             min_chunk_size = self.ALLOWED_MIN_CHUNK_SIZE
 
         self.logger.info("Sending init command")
@@ -139,30 +222,19 @@ class ReadUntil(object):
         self.logger.info("Stream finished after timeout.")
 
 
-    def _unblock_read(self, read_channel, read_number):
-        self._put_action(read_channel, read_number, 'unblock')
-
-
-    def _stop_receiving_read(self, read_channel, read_number):
-        self._put_action(read_channel, read_number, 'stop_further_data')
-
-
     def _process_reads(self, reads):
-        """Process the gRPC stream data.
+        """Process the gRPC stream data, storing read chunks in the data_queue.
 
         :param reads: gRPC data stream iterable as produced by get_live_reads().
         
-        .. note:: This serves as an example only. 
         """
-
         response_counter = Counter()
+
+        unique_reads = set()
 
         read_count = 0
         samples_behind = 0
-        unique_reads = set()
         raw_data_bytes = 0
-        strand_like = 0
-
         last_msg_time = time.time()
         for reads_chunk in reads:
 
@@ -176,48 +248,31 @@ class ReadUntil(object):
                     response_counter[response.response] += 1
 
             progress = self.aquisition_progress()
-
             for read_channel in reads_chunk.channels:
                 read_count += 1
                 read = reads_chunk.channels[read_channel]
                 unique_reads.add(read.id)
                 read_samples_behind = progress.acquired - read.chunk_start_sample
                 samples_behind += read_samples_behind
-
-                # convert the read data into a numpy array of correct type
                 raw_data_bytes += len(read.raw_data)
-                typed_data = numpy.fromstring(read.raw_data, self.signal_dtype)
-                read.raw_data = bytes('', 'utf-8') # we don't need this now
-                logging.debug("Got live read data for channel {}-{}: {} samples behind head, {} processed".format(
-                     read_channel, read.number, read_samples_behind, progress.processed
-                ))
 
-                # make a decision to:
-                #   i) stop recieving data for a read (leaves the read unaffected)
-                #  ii) unblock read, or
-                # iii) by implication do nothing (may receive more data in future)
-                if read.median_before > read.median and (read.median_before - read.median) > 60:
-                    # record a strand and queue request to stop recieving data
-                    strand_like += 1
-                    self._stop_receiving_read(read_channel, read.number)
-                else:
-                    # queue request to unblock read
-                    #self._unblock_read(read_channel, read.number)
-                    pass
+                self.data_queue[read_channel] = read
+                self.stop_receiving_read(read_channel, read.number)
 
             now = time.time()
             if last_msg_time + 1 < now:
                 self.logger.info(
-                    "Seen {} read sections total {} unique reads, "
-                    "{} strand like reads, average of {} samples "
-                    "behind acquisition. {:.2f} MB raw data"
+                    "Interval update: {} read sections, {} unique reads (ever), "
+                    "average {:.0f} samples behind. {:.2f} MB raw data."
                     .format(
-                        read_count, len(unique_reads), strand_like,
-                        samples_behind/read_count, float(raw_data_bytes)/1000/1000
+                        read_count, len(unique_reads),
+                        samples_behind/read_count, raw_data_bytes/1024/1024
                     )
                 )
                 self.logger.info("Response summary: {}".format(response_counter))
 
+                read_count = 0
+                samples_behind = 0
                 raw_data_bytes = 0
                 last_msg_time = now
 
@@ -226,6 +281,8 @@ def _get_parser():
     parser = argparse.ArgumentParser('Read until with alignment filter.')
     parser.add_argument('--port', type=int, default=8004,
         help='MinKNOW server gRPC port.')
+    parser.add_argument('--analysis_delay', type=int, default=1,
+        help='Period to wait before starting analysis.')
     parser.add_argument(
         '--debug', help="Print all debugging information",
         action="store_const", dest="log_level",
@@ -239,14 +296,50 @@ def _get_parser():
     return parser
 
 
+def simple_analysis(client, batch_size=10, timeout=2, delay=1, throttle=0.1):
+    logger = logging.getLogger('Analysis')
+    logger.info('Starting analysis of reads in {}s.'.format(delay))
+    time.sleep(delay)
+
+    last_good = time.time()
+    while True:
+        try:
+            read_batch = client.get_read_chunks(batch_size=batch_size, last=True)
+        except KeyError as e:
+            if last_good + timeout < time.time():
+                logger.critical('Aborting analysis after {}s of inactivity.'.format(timeout))
+                break
+        except Exception as e:
+            raise e
+        else:
+            last_good = time.time()
+            for channel, read in read_batch:
+                # convert the read data into a numpy array of correct type
+                raw_data = numpy.fromstring(read.raw_data, client.signal_dtype)
+                read.raw_data = bytes('', 'utf-8') # we don't need this now
+                if read.median_before > read.median and (read.median_before - read.median) > 60:
+                    client.stop_receiving_read(channel, read.number)
+        time.sleep(throttle)
+ 
+    logger.info('Finished analysis of reads.')
+
+
 def main():
+    import concurrent.futures
     args = _get_parser().parse_args() 
 
     logging.basicConfig(format='[%(asctime)s - %(name)s] %(message)s',
         datefmt='%H:%M:%S', level=args.log_level)
 
     read_until_client = ReadUntil(mk_rpc_port=args.port)
-    read_until_client.run()
+    futures = list()
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures.append(executor.submit(read_until_client.run))
+        futures.append(executor.submit(simple_analysis, read_until_client, delay=args.analysis_delay))
+
+    for f in concurrent.futures.as_completed(futures):
+        if f.exception() is not None:
+            raise f.exception()
 
 
 if __name__ == "__main__":
