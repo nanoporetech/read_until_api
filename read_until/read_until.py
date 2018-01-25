@@ -10,7 +10,7 @@ import uuid
 import numpy
 
 import minknow
-
+from read_until.jsonrpc import Client as JSONClient
 
 class Cache(object):
     def __init__(self, size=100):
@@ -74,24 +74,52 @@ class Cache(object):
 class ReadUntil(object):
     ALLOWED_MIN_CHUNK_SIZE = 4000
 
-    def __init__(self, mk_rpc_port=8004, cache_size=512):
+    def __init__(self, mk_host='127.0.0.1', mk_port=8000, cache_size=512, filter_strands=True, one_chunk=True):
         """A basic Read Until client.
 
-        :param mk_rpc_port: MinKNOW gRPC port.
+        :param mk_port: MinKNOW port.
         :param cache_size: maximum number of read chunks to cache from
-            gRPC stream.
+            gRPC stream. Setting this to the number of device channels
+            will allow caching of the most recent data per channel.
+        :param filter_strands: pre-filter stream to keep only strand-like reads.
+        :param one_chunk: attempt to receive only one_chunk per read. When
+            enabled a request to stop receiving more data for a read is
+            immediately staged when the first chunk is cached.
+
+        The class handles basic interaction with the MinKNOW gRPC stream and
+        provides a thread-safe queue of the most recent read data on each
+        channel.
 
         """
         self.logger = logging.getLogger('ReadUntil')
 
-        self.logger.info('Creating rpc connection on port {}.'.format(mk_rpc_port))
-        self.connection = minknow.rpc.Connection(port=mk_rpc_port)
+        self.mk_host = mk_host
+        self.mk_port = mk_port
+        self.cache_size = cache_size
+        self.filter_strands = filter_strands
+        self.one_chunk = one_chunk
+
+        # Use MinKNOWs jsonrpc to find gRPC port and some other bits
+        self.mk_json_url = 'http://{}:{}/jsonrpc'.format(self.mk_host, self.mk_port)
+        self.logger.info('Querying MinKNOW at {}.'.format(self.mk_json_url))
+        json_client = JSONClient(self.mk_json_url)
+        self.mk_static_data = json_client.get_static_data()
+        self.read_classes = json_client.get_read_classification_map()['read_classification_map']
+        self.strand_classes = set()
+        allowed_classes = set(('strand', 'strand1'))
+        for key, value in self.read_classes.items():
+            if value in allowed_classes:
+                self.strand_classes.add(int(key))
+        self.logger.debug('Strand-like classes are {}.'.format(self.strand_classes))
+
+        self.grpc_port = self.mk_static_data['grpc_port']
+        self.logger.info('Creating rpc connection on port {}.'.format(self.grpc_port))
+        self.connection = minknow.rpc.Connection(host=self.mk_host, port=self.grpc_port)
         self.logger.info('Got rpc connection.')
         self.msgs = self.connection.data._pb
         self.device = minknow.Device(self.connection)
 
         self.signal_dtype = self.device.numpy_data_types.calibrated_signal
-        self.cache_size = cache_size
 
         # the action_queue is used to store unblock/stop_receiving_data
         #    requests before they are put on the gRPC stream.
@@ -104,6 +132,9 @@ class ReadUntil(object):
         """Run Read Until analysis.
 
         :param runner_kwargs: kwargs for ._runner() method.
+
+        .. note:: this method is blocking so requires being run in a thread
+            to allow the caller access to the read data.
 
         """
         # .get_live_reads() takes an iterable of requests and generates
@@ -122,7 +153,7 @@ class ReadUntil(object):
         # reset these for good measure
         self.action_queue = queue.Queue()
         self.data_queue = Cache(size=self.cache_size)
-        self.logger.info("Finished run.")
+        self.logger.info("Finished processing gRPC stream.")
 
 
     def aquisition_progress(self):
@@ -139,16 +170,35 @@ class ReadUntil(object):
 
         :param batch_size: number of reads.
         :param last: get the most recent (else oldest)?
+
         """
         return self.data_queue.popitems(items=batch_size, last=True)
 
 
     def unblock_read(self, read_channel, read_number):
+        """Request that a read be unblocked.
+
+        :param read_channel: a read's channel number.
+        :param read_number: a read's read number (the nth read per channel).
+
+        """
         self._put_action(read_channel, read_number, 'unblock')
 
 
     def stop_receiving_read(self, read_channel, read_number):
+        """Request to receive no more data for a read.
+
+        :param read_channel: a read's channel number.
+        :param read_number: a read's read number (the nth read per channel).
+
+        """
         self._put_action(read_channel, read_number, 'stop_further_data')
+
+
+    @property
+    def queue_length(self):
+        """The length of the read queue."""
+        return len(self.data_queue)
 
 
     def _put_action(self, read_channel, read_number, action):
@@ -237,7 +287,6 @@ class ReadUntil(object):
         raw_data_bytes = 0
         last_msg_time = time.time()
         for reads_chunk in reads:
-
             # In each iteration, we get:
             #   i) responses to our previous actions (success/fail)
             #  ii) raw data for current reads
@@ -251,21 +300,27 @@ class ReadUntil(object):
             for read_channel in reads_chunk.channels:
                 read_count += 1
                 read = reads_chunk.channels[read_channel]
+                if self.one_chunk:
+                    self.stop_receiving_read(read_channel, read.number)
                 unique_reads.add(read.id)
                 read_samples_behind = progress.acquired - read.chunk_start_sample
                 samples_behind += read_samples_behind
                 raw_data_bytes += len(read.raw_data)
 
-                self.data_queue[read_channel] = read
+                strand_like = any([x in self.strand_classes for x in read.chunk_classifications])
+                if not self.filter_strands or strand_like:
+                    self.data_queue[read_channel] = read
 
             now = time.time()
             if last_msg_time + 1 < now:
                 self.logger.info(
                     "Interval update: {} read sections, {} unique reads (ever), "
-                    "average {:.0f} samples behind. {:.2f} MB raw data."
+                    "average {:.0f} samples behind. {:.2f} MB raw data, "
+                    "{} reads in queue."
                     .format(
                         read_count, len(unique_reads),
-                        samples_behind/read_count, raw_data_bytes/1024/1024
+                        samples_behind/read_count, raw_data_bytes/1024/1024,
+                        self.queue_length
                     )
                 )
                 self.logger.info("Response summary: {}".format(response_counter))
@@ -278,8 +333,8 @@ class ReadUntil(object):
 
 def _get_parser():
     parser = argparse.ArgumentParser('Read until with alignment filter.')
-    parser.add_argument('--port', type=int, default=8004,
-        help='MinKNOW server gRPC port.')
+    parser.add_argument('--port', type=int, default=8000,
+        help='MinKNOW server port.')
     parser.add_argument('--analysis_delay', type=int, default=1,
         help='Period to wait before starting analysis.')
     parser.add_argument(
@@ -295,7 +350,7 @@ def _get_parser():
     return parser
 
 
-def simple_analysis(client, batch_size=10, timeout=2, delay=1, throttle=0.1):
+def simple_analysis(client, batch_size=10, timeout=60, delay=1, throttle=0.1):
     logger = logging.getLogger('Analysis')
     logger.info('Starting analysis of reads in {}s.'.format(delay))
     time.sleep(delay)
@@ -330,7 +385,7 @@ def main():
     logging.basicConfig(format='[%(asctime)s - %(name)s] %(message)s',
         datefmt='%H:%M:%S', level=args.log_level)
 
-    read_until_client = ReadUntil(mk_rpc_port=args.port)
+    read_until_client = ReadUntil(mk_port=args.port)
     futures = list()
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures.append(executor.submit(read_until_client.run))
