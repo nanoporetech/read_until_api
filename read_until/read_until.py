@@ -140,7 +140,29 @@ class ReadUntil(object):
         self.running = Event()
 
 
-    def run(self, runner_kwargs={'run_time':5}):
+    @property
+    def aquisition_progress(self):
+        """Get MinKNOW data acquisition progress.
+
+        :returns: a structure with attributes .acquired and .processed.
+
+        """
+        return self.connection.acquisition.get_progress().raw_per_channel
+
+
+    @property
+    def queue_length(self):
+        """The length of the read queue."""
+        return len(self.data_queue)
+
+
+    @property
+    def is_running(self):
+        """The processing status of the gRPC stream."""
+        return self.running.is_set()
+
+
+    def run(self, runner_kwargs={'run_time':30}):
         """Run Read Until analysis.
 
         :param runner_kwargs: kwargs for ._runner() method.
@@ -168,15 +190,6 @@ class ReadUntil(object):
         self.action_queue = queue.Queue()
         self.data_queue = Cache(size=self.cache_size)
         self.logger.info("Finished processing gRPC stream.")
-
-
-    def aquisition_progress(self):
-        """Get MinKNOW data acquisition progress.
-
-        :returns: a structure with attributes .acquired and .processed.
-
-        """
-        return self.connection.acquisition.get_progress().raw_per_channel
 
 
     def get_read_chunks(self, batch_size=1, last=True):
@@ -207,18 +220,6 @@ class ReadUntil(object):
 
         """
         self._put_action(read_channel, read_number, 'stop_further_data')
-
-
-    @property
-    def queue_length(self):
-        """The length of the read queue."""
-        return len(self.data_queue)
-
-
-    @property
-    def is_running(self):
-        """The processing status of the gRPC stream."""
-        return self.running.is_set()
 
 
     def _put_action(self, read_channel, read_number, action):
@@ -253,7 +254,6 @@ class ReadUntil(object):
     def _runner(self, run_time, first_channel=1, last_channel=512, min_chunk_size=1000, action_batch=1000, action_throttle=0.001):
         """Yield the stream initializer request followed by action requests
         placed into the action_queue.
-
 
         :param run_time: maximum time for which to yield actions.
         :param first_channel: lowest channel for which to receive raw data.
@@ -332,7 +332,7 @@ class ReadUntil(object):
                 for response in reads_chunk.action_reponses:
                     response_counter[response.response] += 1
 
-            progress = self.aquisition_progress()
+            progress = self.aquisition_progress
             for read_channel in reads_chunk.channels:
                 read_count += 1
                 read = reads_chunk.channels[read_channel]
