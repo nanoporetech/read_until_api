@@ -17,4 +17,5 @@ rpc_venv
 protobuff
 minknow/rpc/*_pb2.py
 minknow/rpc/*_pb2_grpc.py
+venv
 
