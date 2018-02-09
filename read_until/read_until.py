@@ -1,6 +1,6 @@
 import argparse
 import concurrent.futures
-from collections import Counter, OrderedDict, defaultdict
+from collections import Counter, OrderedDict 
 import logging
 import queue
 import sys
@@ -13,6 +13,8 @@ import numpy
 
 import minknow
 from read_until.jsonrpc import Client as JSONClient
+
+__all__ = ['ReadCache', 'ReadUntilClient'] 
 
 
 class ReadCache(object):
@@ -101,7 +103,7 @@ class ReadCache(object):
             return data
 
 
-class ReadUntil(object):
+class ReadUntilClient(object):
     # The maximum allowed minimum read chunk size
     ALLOWED_MIN_CHUNK_SIZE = 4000
 
@@ -121,7 +123,7 @@ class ReadUntil(object):
 
         To set up and use a client:
 
-        >>> read_until_client = ReadUntil()
+        >>> read_until_client = ReadUntilClient()
         >>> with ThreadPoolExecutor() as executor:
         ...     executor.submit(read_until_client.run,
         ...                     runner_kwargs={'run_time':args.run_time}))
@@ -461,7 +463,7 @@ def _get_parser():
 
 
 def simple_analysis(client, batch_size=10, delay=1, throttle=0.1):
-    """A simple demo analysis leveraging a `ReadUntil` client to manage
+    """A simple demo analysis leveraging a `ReadUntilClient` to manage
     queuing and expiry of read data.
 
     """
@@ -481,7 +483,8 @@ def simple_analysis(client, batch_size=10, delay=1, throttle=0.1):
             read.raw_data = bytes('', 'utf-8') # we don't need this now
 
             # make a decision that the read is good at we don't need more data?
-            if read.median_before > read.median and (read.median_before - read.median) > 60:
+            if read.median_before > read.median and \
+               read.median_before - read.median > 60:
                 client.stop_receiving_read(channel, read.number)
             # we can also call the following for reads we don't like
             #client.unblock_read(channel, read.number)
@@ -500,13 +503,16 @@ def main():
     logging.basicConfig(format='[%(asctime)s - %(name)s] %(message)s',
         datefmt='%H:%M:%S', level=args.log_level)
 
-    read_until_client = ReadUntil(mk_port=args.port, one_chunk=False, filter_strands=True)
+    read_until_client = ReadUntilClient(
+        mk_port=args.port, one_chunk=False, filter_strands=True)
     # this somewhat assumes we get at least two threads ;)
     with ThreadPoolExecutorStackTraced() as executor:
         futures = list()
-        futures.append(executor.submit(read_until_client.run, runner_kwargs={'run_time':args.run_time}))
+        futures.append(executor.submit(
+            read_until_client.run, runner_kwargs={'run_time':args.run_time}))
         for _ in range(3):
-            futures.append(executor.submit(simple_analysis, read_until_client, delay=args.analysis_delay))
+            futures.append(executor.submit(
+                simple_analysis, read_until_client, delay=args.analysis_delay))
 
         for f in concurrent.futures.as_completed(futures):
             if f.exception() is not None:
