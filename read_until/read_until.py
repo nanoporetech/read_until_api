@@ -1,8 +1,10 @@
 import argparse
-from collections import Counter, OrderedDict
+import concurrent.futures
+from collections import Counter, OrderedDict, defaultdict
 import logging
 import queue
 import sys
+import traceback
 from threading import Lock, Event
 import time
 import uuid
@@ -12,12 +14,17 @@ import numpy
 import minknow
 from read_until.jsonrpc import Client as JSONClient
 
-class Cache(object):
+
+class ReadCache(object):
     def __init__(self, size=100):
-        """An ordered dictionary of a maximum size.
+        """An ordered and keyed queue of a maximum size to store read chunks.
 
         :param size: maximum number of entries, when more entries are added
            the oldest current entries will be removed.
+
+        The attributes .missed and .replaced count the total number of reads
+        never popped, and the number of reads chunks replaced by a chunk from
+        the same read.
 
         """
 
@@ -26,6 +33,8 @@ class Cache(object):
         self.size = size
         self.dict = OrderedDict()
         self.lock = Lock()
+        self.missed = 0
+        self.replaced = 0
 
 
     def __getitem__(self, key):
@@ -35,10 +44,21 @@ class Cache(object):
 
     def __setitem__(self, key, value):
         with self.lock:
+            counted = False
             while len(self.dict) >= self.size:
-                self.dict.popitem(last=False)
+                counted = True
+                k, v = self.dict.popitem(last=False)
+                if k == key and v.number == value.number:
+                    self.replaced += 1
+                else:
+                    self.missed += 1
             if key in self.dict:
-                del self.dict[key]
+                if not counted:
+                    if self.dict[key].number == value.number:
+                        self.replaced += 1
+                    else:
+                        self.missed += 1
+                del self.dict[key] 
             self.dict[key] = value
 
 
@@ -82,10 +102,13 @@ class Cache(object):
 
 
 class ReadUntil(object):
+    # The maximum allowed minimum read chunk size
     ALLOWED_MIN_CHUNK_SIZE = 4000
 
     def __init__(self, mk_host='127.0.0.1', mk_port=8000, cache_size=512, filter_strands=True, one_chunk=True):
-        """A basic Read Until client.
+        """A basic Read Until client. The class handles basic interaction
+        with the MinKNOW gRPC stream and provides a thread-safe queue
+        containing the most recent read data on each channel.
 
         :param mk_port: MinKNOW port.
         :param cache_size: maximum number of read chunks to cache from
@@ -96,9 +119,20 @@ class ReadUntil(object):
             enabled a request to stop receiving more data for a read is
             immediately staged when the first chunk is cached.
 
-        The class handles basic interaction with the MinKNOW gRPC stream and
-        provides a thread-safe queue of the most recent read data on each
-        channel.
+        To set up and use a client:
+
+        >>> read_until_client = ReadUntil()
+        >>> with ThreadPoolExecutor() as executor:
+        ...     executor.submit(read_until_client.run,
+        ...                     runner_kwargs={'run_time':args.run_time}))
+
+        Calls to methods of `read_until_client` can then be made in a separate
+        thread. For example an continually running analysis function can be
+        submitted to the executor as:
+
+        >>> def analysis(client, *args, **kwargs):
+        ...     pass
+        >>> executor.submit(analysis_function, read_until_client)
 
         """
         self.logger = logging.getLogger('ReadUntil')
@@ -114,12 +148,12 @@ class ReadUntil(object):
         self.logger.info('Querying MinKNOW at {}.'.format(self.mk_json_url))
         json_client = JSONClient(self.mk_json_url)
         self.mk_static_data = json_client.get_static_data()
-        self.read_classes = json_client.get_read_classification_map()['read_classification_map']
+        self.read_classes = {int(k):v for k, v in json_client.get_read_classification_map()['read_classification_map'].items()}
         self.strand_classes = set()
-        allowed_classes = set(('strand', 'strand1'))
+        allowed_classes = set(('strand', 'strand1', 'adapter', 'unavailable'))
         for key, value in self.read_classes.items():
             if value in allowed_classes:
-                self.strand_classes.add(int(key))
+                self.strand_classes.add(key)
         self.logger.debug('Strand-like classes are {}.'.format(self.strand_classes))
 
         self.grpc_port = self.mk_static_data['grpc_port']
@@ -135,7 +169,7 @@ class ReadUntil(object):
         #    requests before they are put on the gRPC stream.
         self.action_queue = queue.Queue()
         # the data_queue is used to store the latest chunk per channel
-        self.data_queue = Cache(size=self.cache_size)
+        self.data_queue = ReadCache(size=self.cache_size)
         # a flag to indicate where gRPC stream is being processed
         self.running = Event()
 
@@ -154,6 +188,23 @@ class ReadUntil(object):
     def queue_length(self):
         """The length of the read queue."""
         return len(self.data_queue)
+
+
+    @property
+    def missed_reads(self):
+        """Number of reads ejected from queue (i.e reads had one or more chunks
+        enter into the analysis queue but were replaced with a distinct read
+        before being pulled from the queue."""
+        return self.data_queue.missed
+
+
+    @property
+    def missed_chunks(self):
+        """Number of read chunks replaced in queue by a chunk from the same
+        read (a single read may have its queued chunk replaced more than once).
+
+        """
+        return self.data_queue.replaced
 
 
     @property
@@ -188,7 +239,7 @@ class ReadUntil(object):
         # reset
         self.running.clear()
         self.action_queue = queue.Queue()
-        self.data_queue = Cache(size=self.cache_size)
+        self.data_queue = ReadCache(size=self.cache_size)
         self.logger.info("Finished processing gRPC stream.")
 
 
@@ -251,7 +302,7 @@ class ReadUntil(object):
         ))
 
 
-    def _runner(self, run_time, first_channel=1, last_channel=512, min_chunk_size=1000, action_batch=1000, action_throttle=0.001):
+    def _runner(self, run_time, first_channel=1, last_channel=512, min_chunk_size=2000, action_batch=1000, action_throttle=0.001):
         """Yield the stream initializer request followed by action requests
         placed into the action_queue.
 
@@ -352,11 +403,11 @@ class ReadUntil(object):
                 self.logger.info(
                     "Interval update: {} read sections, {} unique reads (ever), "
                     "average {:.0f} samples behind. {:.2f} MB raw data, "
-                    "{} reads in queue."
+                    "{} reads in queue, {} reads missed, {} chunks replaced."
                     .format(
                         read_count, len(unique_reads),
                         samples_behind/read_count, raw_data_bytes/1024/1024,
-                        self.queue_length
+                        self.queue_length, self.missed_reads, self.missed_chunks
                     )
                 )
                 self.logger.info("Response summary: {}".format(response_counter))
@@ -367,12 +418,35 @@ class ReadUntil(object):
                 last_msg_time = now
 
 
+class ThreadPoolExecutorStackTraced(concurrent.futures.ThreadPoolExecutor):
+    """ThreadPoolExecutor records only the text of an exception,
+    this class will give back a bit more."""
+
+    def submit(self, fn, *args, **kwargs):
+        """Submits the wrapped function instead of `fn`"""
+
+        return super(ThreadPoolExecutorStackTraced, self).submit(
+            self._function_wrapper, fn, *args, **kwargs)
+
+    def _function_wrapper(self, fn, *args, **kwargs):
+        """Wraps `fn` in order to preserve the traceback of any kind of
+        raised exception
+
+        """
+        try:
+            return fn(*args, **kwargs)
+        except Exception:
+            raise sys.exc_info()[0](traceback.format_exc())
+
+
 def _get_parser():
     parser = argparse.ArgumentParser('Read until with alignment filter.')
     parser.add_argument('--port', type=int, default=8000,
         help='MinKNOW server port.')
     parser.add_argument('--analysis_delay', type=int, default=1,
         help='Period to wait before starting analysis.')
+    parser.add_argument('--run_time', type=int, default=30,
+        help='Period to run the analysis.')
     parser.add_argument(
         '--debug', help="Print all debugging information",
         action="store_const", dest="log_level",
@@ -387,19 +461,32 @@ def _get_parser():
 
 
 def simple_analysis(client, batch_size=10, delay=1, throttle=0.1):
+    """A simple demo analysis leveraging a `ReadUntil` client to manage
+    queuing and expiry of read data.
+
+    """
+
     logger = logging.getLogger('Analysis')
+    # we sleep a little simply to ensure the client has started initialised
     logger.info('Starting analysis of reads in {}s.'.format(delay))
     time.sleep(delay)
 
     while client.is_running:
         t0 = time.time()
+        # get the most recent read chunks from the client
         read_batch = client.get_read_chunks(batch_size=batch_size, last=True)
         for channel, read in read_batch:
             # convert the read data into a numpy array of correct type
             raw_data = numpy.fromstring(read.raw_data, client.signal_dtype)
             read.raw_data = bytes('', 'utf-8') # we don't need this now
+
+            # make a decision that the read is good at we don't need more data?
             if read.median_before > read.median and (read.median_before - read.median) > 60:
                 client.stop_receiving_read(channel, read.number)
+            # we can also call the following for reads we don't like
+            #client.unblock_read(channel, read.number)
+
+        # limit the rate at which we make requests            
         t1 = time.time()
         if t0 + throttle > t1:
             time.sleep(throttle + t0 - t1)
@@ -408,24 +495,19 @@ def simple_analysis(client, batch_size=10, delay=1, throttle=0.1):
 
 
 def main():
-    import concurrent.futures
     args = _get_parser().parse_args() 
 
     logging.basicConfig(format='[%(asctime)s - %(name)s] %(message)s',
         datefmt='%H:%M:%S', level=args.log_level)
 
-    read_until_client = ReadUntil(mk_port=args.port)
-    futures = list()
+    read_until_client = ReadUntil(mk_port=args.port, one_chunk=False, filter_strands=True)
     # this somewhat assumes we get at least two threads ;)
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures.append(executor.submit(read_until_client.run))
-        futures.append(executor.submit(simple_analysis, read_until_client, delay=args.analysis_delay))
+    with ThreadPoolExecutorStackTraced() as executor:
+        futures = list()
+        futures.append(executor.submit(read_until_client.run, runner_kwargs={'run_time':args.run_time}))
+        for _ in range(3):
+            futures.append(executor.submit(simple_analysis, read_until_client, delay=args.analysis_delay))
 
-    for f in concurrent.futures.as_completed(futures):
-        if f.exception() is not None:
-            raise f.exception()
-
-
-if __name__ == "__main__":
-    main()
-
+        for f in concurrent.futures.as_completed(futures):
+            if f.exception() is not None:
+                print(f.exception())
