@@ -1,4 +1,3 @@
-# pomoxis requirements. 
-# Add comments to keep track of why we are using particular versions
 grpcio
+requests
 

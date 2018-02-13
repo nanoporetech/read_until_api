@@ -102,11 +102,12 @@ class Client(object):
             raise ProtocolError('Response is not a dictionary', server_response=response, server_data=server_data)
 
         # jsonrpc spec says error should only be present if there were an error
-        #     but MinKNOW returns '0' when no error is present
+        #     but MinKNOW returns '0' when no error is present. It also does not
+        #     return a structure with 'code' and 'message', just a bare message.
         error = server_data.get('error')
         if error and error != '0':
-            code = server_data['error'].get('code', '')
-            message = server_data['error'].get('message', '')
+            code = -32000
+            message = error
             raise ProtocolError('Error: %s %s' % (code, message), server_response=response, server_data=server_data)
         elif 'result' not in server_data:
             raise ProtocolError('Response without a result field', server_response=response, server_data=server_data)
