@@ -69,7 +69,7 @@ setup(
     zip_safe=False,
     entry_points={
         'console_scripts': [
-            'read_until_simple = {}.read_until:main'.format(__pkg_name__),
+            'read_until_simple = {}.simple:main'.format(__pkg_name__),
             'read_until_ident = {}.identification:main'.format(__pkg_name__)
         ]
     },

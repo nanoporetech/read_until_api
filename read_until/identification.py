@@ -2,6 +2,7 @@ from collections import defaultdict, Counter
 import concurrent
 import logging
 import random
+import sys
 import time
 
 import numpy
@@ -12,7 +13,8 @@ try:
 except ImportError:
     raise ImportError("'mappy' and 'scrappy' must be installed to use this functionality.")
 
-from read_until import read_until
+import read_until
+import read_until.simple as read_until_extras
 
 
 def id_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=1, throttle=0.1):
@@ -43,6 +45,8 @@ def id_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=1, t
 
     def basecall_data(raw):
         seq, score, pos, start, end, base_probs = scrappy.basecall_raw(raw)
+        if sys.version_info[0] < 3:
+            seq = seq.encode()
         return seq, score
 
     action_counters = defaultdict(Counter)
@@ -60,7 +64,7 @@ def id_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=1, t
             else:
                 # convert the read data into a numpy array of correct type
                 raw_data = numpy.fromstring(read.raw_data, client.signal_dtype)
-                read.raw_data = bytes('', 'utf-8') # we don't need this now
+                read.raw_data = read_until.NullRaw
                 basecall, score = basecall_data(raw_data)
                 aligns = list(mapper.map(basecall))
                 if len(aligns) == 0:
@@ -101,7 +105,7 @@ def id_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=1, t
 
 
 def main():
-    parser = read_until._get_parser()
+    parser = read_until_extras._get_parser()
     parser.description = 'Read until with basecall-alignment filter.'
     parser.add_argument('map_index', help='minimap alignment index.')
     args = parser.parse_args()
@@ -113,7 +117,7 @@ def main():
     read_until_client = read_until.ReadUntilClient(
         mk_port=args.port, one_chunk=False, filter_strands=True
     )
-    with read_until.ThreadPoolExecutorStackTraced() as executor:
+    with read_until_extras.ThreadPoolExecutorStackTraced() as executor:
         futures = list()
         futures.append(executor.submit(
             read_until_client.run, runner_kwargs={
@@ -129,25 +133,26 @@ def main():
                 delay=args.analysis_delay
         ))
 
-        total_counter = defaultdict(Counter)
+        total_counters = defaultdict(Counter)
         for f in concurrent.futures.as_completed(futures):
             if f.exception() is not None:
                 logger.warning(f.exception())
-            elif isinstance(f.result, defaultdict):
-                new_counts = f.result
-                all_keys = set(total_counters.keys()) + set(new_counts.keys())
+            elif isinstance(f.result(), defaultdict):
+                new_counts = f.result()
+                all_keys = set(total_counters.keys()) | set(new_counts.keys())
                 for key in all_keys:
-                    total_counts[key] += new_counts[key]
+                    total_counters[key] += new_counts[key]
+
         actions = (
               'skipped', 'unaligned', 'section_0',
               'section_1', 'unblock', 'stop'
         )
-        msg = ['Action summary:', '\t'.join(('group', 'action', 'count')]
+        msg = ['Action summary:', '\t'.join(('group', 'action'.ljust(9), 'count'))]
         for group in (0, 1, 2):
             for action in actions:
                 msg.append(
                     '\t'.join((str(x) for x in (
-                        chan, thing, action_counters[chan][thing]
+                        group, action.ljust(9), total_counters[group][action]
                     )))
                 )
         msg = '\n'.join(msg)
