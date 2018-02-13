@@ -13,7 +13,7 @@ import sphinx_rtd_theme
 
 
 # General information about the project.
-__pkg_name__ = u'Read Until
+__pkg_name__ = u'read_until'
 project = __pkg_name__.capitalize()
 copyright = u'2017, Oxford Nanopore Technologies'
 
