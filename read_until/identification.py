@@ -104,6 +104,7 @@ def id_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=1, t
 def main():
     parser = read_until._get_parser()
     parser.add_argument('map_index', help='minimap alignment index.')
+    parser.add_argument('--workers', default=1, type=int, help='worker threads.')
     args = parser.parse_args()
 
     logging.basicConfig(format='[%(asctime)s - %(name)s] %(message)s',
@@ -113,7 +114,7 @@ def main():
     with read_until.ThreadPoolExecutorStackTraced() as executor:
         futures = list()
         futures.append(executor.submit(read_until_client.run, runner_kwargs={'run_time':args.run_time}))
-        for _ in range(3):
+        for _ in range(args.workers):
             futures.append(executor.submit(id_analysis, read_until_client, args.map_index, delay=args.analysis_delay))
 
         for f in concurrent.futures.as_completed(futures):
