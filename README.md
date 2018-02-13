@@ -17,10 +17,10 @@ python interpreter in the MinKNOW root directory. For example on Ubuntu:
 Two demonstration programs are provided (and are installed into
 MinKNOW/ont-python/bin/):
 
-   i)  read_until_simple: this serves as a simple test, and the code
+   1.  `read_until_simple`: this serves as a simple test, and the code
        demonstrates use of basic functionality for develops
        (read_until.simple).
-   ii) read_until_ident: this is a rather more fully featured example of use
+   2.  `read_until_ident`: this is a rather more fully featured example of use
        of the API to identify reads via basecalling and alignment. To run it
        requires the optional dependencies of scrappy and mappy. The latter of
        these can be installed via `ont-python/bin/python -m pip install mappy`,
