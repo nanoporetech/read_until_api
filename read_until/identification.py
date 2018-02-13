@@ -14,6 +14,7 @@ except ImportError:
 
 from read_until import read_until
 
+
 def id_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=1, throttle=0.1):
     """Analysis using scrappy and mappy to accept/reject reads based on
     channel and identity as determined by alignment of basecall to
@@ -29,6 +30,8 @@ def id_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=1, t
     :param batch_size: number of reads to pull from `client` at a time.
     :param delay: number of seconds to wait before starting analysis.
     :param throttle: minimum interval between requests to `client`.
+
+    :returns: a dictionary of Counters of actions taken per channel group.
 
     """
     logger = logging.getLogger('Analysis')
@@ -94,30 +97,58 @@ def id_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=1, t
 
     logger.info('Finished analysis of reads.')
 
-    print('\t'.join(('chan', 'choice', 'count')))
-    for chan in (0, 1, 2):
-        for thing in ('skipped', 'unaligned', 'section_0', 'section_1', 'unblock', 'stop'):
-            print('\t'.join((str(x) for x in (chan, thing, action_counters[chan][thing]))))
-        print("-------------")
+    return action_counters
 
 
 def main():
     parser = read_until._get_parser()
+    parser.description = 'Read until with basecall-alignment filter.'
     parser.add_argument('map_index', help='minimap alignment index.')
-    parser.add_argument('--workers', default=1, type=int, help='worker threads.')
     args = parser.parse_args()
 
     logging.basicConfig(format='[%(asctime)s - %(name)s] %(message)s',
         datefmt='%H:%M:%S', level=args.log_level)
+    logger = logging.getLogger('Manager')
 
-    read_until_client = read_until.ReadUntilClient(mk_port=args.port, one_chunk=False, filter_strands=True)
+    read_until_client = read_until.ReadUntilClient(
+        mk_port=args.port, one_chunk=False, filter_strands=True
+    )
     with read_until.ThreadPoolExecutorStackTraced() as executor:
         futures = list()
-        futures.append(executor.submit(read_until_client.run, runner_kwargs={'run_time':args.run_time}))
+        futures.append(executor.submit(
+            read_until_client.run, runner_kwargs={
+                'run_time':args.run_time, 'min_chunk_size':args.min_chunk_size
+            }
+        ))
+        # Launch several incarnations of the worker, this is a rather inelegant
+        #    form of parallelism, not least as each worker will create its own
+        #    mapping index (which might be large).
         for _ in range(args.workers):
-            futures.append(executor.submit(id_analysis, read_until_client, args.map_index, delay=args.analysis_delay))
+            futures.append(executor.submit(
+                id_analysis, read_until_client, args.map_index,
+                delay=args.analysis_delay
+        ))
 
+        total_counter = defaultdict(Counter)
         for f in concurrent.futures.as_completed(futures):
             if f.exception() is not None:
-                print(f.exception())
-
+                logger.warning(f.exception())
+            elif isinstance(f.result, defaultdict):
+                new_counts = f.result
+                all_keys = set(total_counters.keys()) + set(new_counts.keys())
+                for key in all_keys:
+                    total_counts[key] += new_counts[key]
+        actions = (
+              'skipped', 'unaligned', 'section_0',
+              'section_1', 'unblock', 'stop'
+        )
+        msg = ['Action summary:', '\t'.join(('group', 'action', 'count')]
+        for group in (0, 1, 2):
+            for action in actions:
+                msg.append(
+                    '\t'.join((str(x) for x in (
+                        chan, thing, action_counters[chan][thing]
+                    )))
+                )
+        msg = '\n'.join(msg)
+        logger.info(msg)

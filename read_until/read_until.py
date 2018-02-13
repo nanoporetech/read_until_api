@@ -107,7 +107,7 @@ class ReadUntilClient(object):
     # The maximum allowed minimum read chunk size
     ALLOWED_MIN_CHUNK_SIZE = 4000
 
-    def __init__(self, mk_host='127.0.0.1', mk_port=8000, cache_size=512, filter_strands=True, one_chunk=True):
+    def __init__(self, mk_host='127.0.0.1', mk_port=8000, cache_size=512, filter_strands=True, one_chunk=True, prefilter_classes={'strand', 'adapter'}):
         """A basic Read Until client. The class handles basic interaction
         with the MinKNOW gRPC stream and provides a thread-safe queue
         containing the most recent read data on each channel.
@@ -120,6 +120,8 @@ class ReadUntilClient(object):
         :param one_chunk: attempt to receive only one_chunk per read. When
             enabled a request to stop receiving more data for a read is
             immediately staged when the first chunk is cached.
+        :param prefilter_classes: a set of read classes to accept through
+            prefilter. Ignored if filter_strands is `False`.
 
         To set up and use a client:
 
@@ -144,17 +146,21 @@ class ReadUntilClient(object):
         self.cache_size = cache_size
         self.filter_strands = filter_strands
         self.one_chunk = one_chunk
+        self.prefilter_classes = prefilter_classes
 
         # Use MinKNOWs jsonrpc to find gRPC port and some other bits
         self.mk_json_url = 'http://{}:{}/jsonrpc'.format(self.mk_host, self.mk_port)
         self.logger.info('Querying MinKNOW at {}.'.format(self.mk_json_url))
         json_client = JSONClient(self.mk_json_url)
         self.mk_static_data = json_client.get_static_data()
-        self.read_classes = {int(k):v for k, v in json_client.get_read_classification_map()['read_classification_map'].items()}
+        class_map = json_client.get_read_classification_map()
+        self.read_classes = {
+            int(k):v for k, v in
+            class_map['read_classification_map'].items()
+        }
         self.strand_classes = set()
-        allowed_classes = set(('strand', 'strand1', 'adapter', 'unavailable'))
         for key, value in self.read_classes.items():
-            if value in allowed_classes:
+            if value in self.prefilter_classes:
                 self.strand_classes.add(key)
         self.logger.debug('Strand-like classes are {}.'.format(self.strand_classes))
 
@@ -321,7 +327,10 @@ class ReadUntilClient(object):
             self.logger.warning("Reducing min_chunk_size to {}".format(self.ALLOWED_MIN_CHUNK_SIZE))
             min_chunk_size = self.ALLOWED_MIN_CHUNK_SIZE
 
-        self.logger.info("Sending init command")
+        self.logger.info(
+            "Sending init command, channels:{}-{}, min_chunk:{}".format(
+            first_channel, last_channel, min_chunk_size)
+        )
         yield self.msgs.GetLiveReadsRequest(
             setup=self.msgs.GetLiveReadsRequest.StreamSetup(
                 first_channel=first_channel,
@@ -424,11 +433,12 @@ class ThreadPoolExecutorStackTraced(concurrent.futures.ThreadPoolExecutor):
     """ThreadPoolExecutor records only the text of an exception,
     this class will give back a bit more."""
 
+
     def submit(self, fn, *args, **kwargs):
         """Submits the wrapped function instead of `fn`"""
-
         return super(ThreadPoolExecutorStackTraced, self).submit(
             self._function_wrapper, fn, *args, **kwargs)
+
 
     def _function_wrapper(self, fn, *args, **kwargs):
         """Wraps `fn` in order to preserve the traceback of any kind of
@@ -442,13 +452,17 @@ class ThreadPoolExecutorStackTraced(concurrent.futures.ThreadPoolExecutor):
 
 
 def _get_parser():
-    parser = argparse.ArgumentParser('Read until with alignment filter.')
+    parser = argparse.ArgumentParser('Read until API demonstration..')
     parser.add_argument('--port', type=int, default=8000,
         help='MinKNOW server port.')
+    parser.add_argument('--workers', default=1, type=int,
+        help='worker threads.')
     parser.add_argument('--analysis_delay', type=int, default=1,
         help='Period to wait before starting analysis.')
     parser.add_argument('--run_time', type=int, default=30,
         help='Period to run the analysis.')
+    parser.add_argument('--min_chunk_size', type=int, default=2000,
+        help='Minimum read chunk size to receive.')
     parser.add_argument(
         '--debug', help="Print all debugging information",
         action="store_const", dest="log_level",
@@ -466,9 +480,17 @@ def simple_analysis(client, batch_size=10, delay=1, throttle=0.1):
     """A simple demo analysis leveraging a `ReadUntilClient` to manage
     queuing and expiry of read data.
 
+    :param client: an instance of a `ReadUntilClient` object.
+    :param batch_size: number of reads to pull from `client` at a time.
+    :param delay: number of seconds to wait before starting analysis.
+    :param throttle: minimum interval between requests to `client`.
     """
 
     logger = logging.getLogger('Analysis')
+    logger.warn(
+        'Initialising simple analysis. '
+        'This will likely not achieve anything useful.'
+    )
     # we sleep a little simply to ensure the client has started initialised
     logger.info('Starting analysis of reads in {}s.'.format(delay))
     time.sleep(delay)
@@ -502,18 +524,24 @@ def main():
 
     logging.basicConfig(format='[%(asctime)s - %(name)s] %(message)s',
         datefmt='%H:%M:%S', level=args.log_level)
+    logger = logging.getLogger('Manager')
 
     read_until_client = ReadUntilClient(
         mk_port=args.port, one_chunk=False, filter_strands=True)
+
     # this somewhat assumes we get at least two threads ;)
     with ThreadPoolExecutorStackTraced() as executor:
         futures = list()
         futures.append(executor.submit(
-            read_until_client.run, runner_kwargs={'run_time':args.run_time}))
-        for _ in range(3):
+            read_until_client.run, runner_kwargs={
+                'run_time':args.run_time, 'min_chunk_size':args.min_chunk_size
+            }
+        ))
+        for _ in range(args.workers):
             futures.append(executor.submit(
-                simple_analysis, read_until_client, delay=args.analysis_delay))
+                simple_analysis, read_until_client, delay=args.analysis_delay
+            ))
 
         for f in concurrent.futures.as_completed(futures):
             if f.exception() is not None:
-                print(f.exception())
+                logger.warning(f.exception())
