@@ -1,8 +1,10 @@
 Welcome to the Read Until API
 =============================
 
-This package provides a high level API to the raw read data streaming
-functionality in MinKNOW.
+The Read Until API provides a mechanism for a client script to connect to a
+MinKNOW server. The server can be asked to push a raw data to the client 
+script in real-time. The data can be analysed in the way most fit for purpose, 
+and a return call can be made to the server to unblock the read in progress.
 
 Installation
 ------------

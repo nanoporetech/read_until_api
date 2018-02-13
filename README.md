@@ -1,45 +1,29 @@
-[//]: 
-Read Until2
-===========
+Read Until
+==========
 
-Temporary Build Instructions
-----------------------------
-
-    make -f MakegRPC.mk build
-    make install
-
-This will glone the .proto files and try to build them (with a lot of nastiness)
-Included are modified versions of the files `minknow/rpc/*service.py`: nasty
-python2 relative imports have been amended and additional imports of `*pb_grpc`
-have been added. All of this needs fixing upstream.
-
-
-
-
-[//]: 
-[![Build Status](https://travis-ci.org/nanoporetech/read_until.svg?branch=master)](https://travis-ci.org/nanoporetech/read_until)
-
-[//]: 
 The Read Until API provides a mechanism for a client script to connect to a
 MinKNOW server. The server can be asked to push a raw data to the client 
 script in real-time. The data can be analysed in the way most fit for purpose, 
 and a return call can be made to the server to unblock the read in progress.
 
-[//]: 
-Documentation can be found at https://nanoporetech.github.io/read_until/.
+Installation
+------------
 
+The package can be installed into MinKNOW's python environment using the
+python interpreter in the MinKNOW root directory. For example on Ubuntu:
 
-Build
------
+    sudo /opt/ONT/MinKNOW/ont-python/bin/python setup.py install
 
-The project should be installed inside a virtual environment. A Makefile is
-provided to fetch, compile and install all direct dependencies into an
-environment.
+Two demonstration programs are provided (and are installed into
+MinKNOW/ont-python/bin/):
 
-To setup the environment run:
-
-    git clone --recursive https://github.com/nanoporetech/read_until
-    cd read_until 
-    make install
-    . ./venv/bin/activate
+   i)  read_until_simple: this serves as a simple test, and the code
+       demonstrates use of basic functionality for develops
+       (read_until.simple).
+   ii) read_until_ident: this is a rather more fully featured example of use
+       of the API to identify reads via basecalling and alignment. To run it
+       requires the optional dependencies of scrappy and mappy. The latter of
+       these can be installed via `ont-python/bin/python -m pip install mappy`,
+       whilst the former can be obtained from Oxford Nanopore Technologies'
+       github repositories.
 
