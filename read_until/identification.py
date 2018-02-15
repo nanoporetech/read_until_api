@@ -160,7 +160,7 @@ def filter_targets(client, mapper, targets, batch_size=10, delay=1, throttle=0.1
                         [client.read_classes[x] for x in read.chunk_classifications]
                     ))
                     unblock = True
-                    hit = ''
+                    hit = 'off_target'
                     for target in targets:
                         if align.ctg == target[0]:
                             # This could be a little more permissive
@@ -170,7 +170,7 @@ def filter_targets(client, mapper, targets, batch_size=10, delay=1, throttle=0.1
                                 hit = '{}:{}-{}'.format(*target)
 
                     # store on target
-                    action_counters[channel_group][unblock] += 1
+                    action_counters[channel_group][hit] += 1
                     if unblock:
                         logger.debug('Unblocking channel {}:{}:{}.'.format(channel, read.number, read.chunk_start_sample))
                         client.unblock_read(channel, read.number)
@@ -245,7 +245,7 @@ def main():
                     total_counters[key] += new_counts[key]
 
         groups = list(total_counters.keys())
-        actions = {}
+        actions = set()
         for group in groups:
             actions |= set(total_counters[group].keys())
         
@@ -254,7 +254,7 @@ def main():
             for action in actions:
                 msg.append(
                     '\t'.join((str(x) for x in (
-                        group, action.ljust(9), total_counters[group][action]
+                        group, str(action).ljust(9), total_counters[group][action]
                     )))
                 )
         msg = '\n'.join(msg)
