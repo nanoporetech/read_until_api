@@ -407,6 +407,16 @@ class ReadUntilClient(object):
                 read_count += 1
                 read = reads_chunk.channels[read_channel]
                 if self.one_chunk:
+                    if read.id in unique_reads:
+                        # previous stop request wasn't enacted in time, don't
+                        #   put the read back in the queue to avoid situation
+                        #   where read has been popped from queue already and
+                        #   we reinsert.
+                        self.logger.debug(
+                            'Rereceived {}:{} after stop request.'.format(
+                            read_channel, read.number
+                        ))
+                        continue
                     self.stop_receiving_read(read_channel, read.number)
                 unique_reads.add(read.id)
                 read_samples_behind = progress.acquired - read.chunk_start_sample

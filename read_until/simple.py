@@ -41,6 +41,8 @@ def _get_parser():
         help='Period to wait before starting analysis.')
     parser.add_argument('--run_time', type=int, default=30,
         help='Period to run the analysis.')
+    parser.add_argument('--one_chunk', default=False, action='store_true',
+        help='Minimum read chunk size to receive.')
     parser.add_argument('--min_chunk_size', type=int, default=2000,
         help='Minimum read chunk size to receive.')
     parser.add_argument(
@@ -108,7 +110,7 @@ def main():
     logger = logging.getLogger('Manager')
 
     read_until_client = read_until.ReadUntilClient(
-        mk_port=args.port, one_chunk=False, filter_strands=True)
+        mk_port=args.port, one_chunk=args.one_chunk, filter_strands=True)
 
     # this somewhat assumes we get at least two threads ;)
     with ThreadPoolExecutorStackTraced() as executor:
