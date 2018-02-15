@@ -192,7 +192,10 @@ def main():
     parser = read_until_extras._get_parser()
     parser.description = 'Read until with basecall-alignment filter.'
     parser.add_argument('map_index', help='minimap alignment index.')
-    parser.add_argument('--targets', default=None, nargs='+', help='list of target regions chr:start-end.')
+    parser.add_argument('--targets', default=None, nargs='+',
+        help='list of target regions chr:start-end.')
+    parser.add_argument('--control_group', default=16, type=int,
+        help='Inverse proportion of channels in control group.')
     args = parser.parse_args()
 
     logging.basicConfig(format='[%(asctime)s - %(name)s] %(message)s',

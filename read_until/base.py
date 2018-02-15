@@ -111,11 +111,26 @@ class ReadCache(object):
             return data
 
 
+def _format_iter(data):
+    # make a nice text string from iter
+    data = list(data)
+    result = ''
+    if len(data) == 1:
+        result = data[0]
+    elif len(data) == 2:
+        result = ' and '.join(data)
+    else:
+        result = ', '.join(data[:-1])
+        result += ', and {}'.format(data[-1])
+    return result
+
+
 class ReadUntilClient(object):
     # The maximum allowed minimum read chunk size
     ALLOWED_MIN_CHUNK_SIZE = 4000
 
-    def __init__(self, mk_host='127.0.0.1', mk_port=8000, cache_size=512, filter_strands=True, one_chunk=True, prefilter_classes={'strand', 'adapter'}):
+    def __init__(self, mk_host='127.0.0.1', mk_port=8000, cache_size=512, cache_type=ReadCache,
+                 filter_strands=True, one_chunk=True, prefilter_classes={'strand', 'adapter'}):
         """A basic Read Until client. The class handles basic interaction
         with the MinKNOW gRPC stream and provides a thread-safe queue
         containing the most recent read data on each channel.
@@ -124,6 +139,8 @@ class ReadUntilClient(object):
         :param cache_size: maximum number of read chunks to cache from
             gRPC stream. Setting this to the number of device channels
             will allow caching of the most recent data per channel.
+        :param cache_type: a type derived from `ReadCache` for managing
+            incoming read chunks. 
         :param filter_strands: pre-filter stream to keep only strand-like reads.
         :param one_chunk: attempt to receive only one_chunk per read. When
             enabled a request to stop receiving more data for a read is
@@ -152,9 +169,21 @@ class ReadUntilClient(object):
         self.mk_host = mk_host
         self.mk_port = mk_port
         self.cache_size = cache_size
+        self.CacheType = cache_type
         self.filter_strands = filter_strands
         self.one_chunk = one_chunk
         self.prefilter_classes = prefilter_classes
+
+        client_type = 'single chunk' if self.one_chunk else 'many chunk'
+        filters = ' '.join(self.prefilter_classes)
+        filter_to = 'without prefilter'
+        if self.filter_strands:
+            if len(self.prefilter_classes) == 0:
+                raise ValueError('Read filtering set but no filter classes given.')
+            classes = _format_iter(self.prefilter_classes)
+            filter_to = 'filtering to {} read chunks'.format(classes)
+        self.logger.info('Creating {} client with {} data queue {}.'.format(
+            client_type, self.CacheType.__name__, filter_to))
 
         # Use MinKNOWs jsonrpc to find gRPC port and some other bits
         self.mk_json_url = 'http://{}:{}/jsonrpc'.format(self.mk_host, self.mk_port)
@@ -185,7 +214,7 @@ class ReadUntilClient(object):
         #    requests before they are put on the gRPC stream.
         self.action_queue = queue.Queue()
         # the data_queue is used to store the latest chunk per channel
-        self.data_queue = ReadCache(size=self.cache_size)
+        self.data_queue = self.CacheType(size=self.cache_size)
         # a flag to indicate where gRPC stream is being processed
         self.running = Event()
 
@@ -255,7 +284,7 @@ class ReadUntilClient(object):
         # reset
         self.running.clear()
         self.action_queue = queue.Queue()
-        self.data_queue = ReadCache(size=self.cache_size)
+        self.data_queue = self.CacheType(size=self.cache_size)
         self.logger.info("Finished processing gRPC stream.")
 
 
