@@ -126,78 +126,77 @@ Buffers definition files) serves as a more complete reference.
 
     message GetLiveReadsResponse {
         message ReadData {
-	    // The id of this read, this id is unique for every read ever
-	    // produced.
-	    string id = 1;
+            // The id of this read, this id is unique for every read ever
+            // produced.
+            string id = 1;
     
-	    // The minknow assigned number of this read
+            // The minknow assigned number of this read
             //
-	    // Read numbers always increment throughout the experiment, and are
-	    // unique per channel - however they are not necessarily contiguous.
-	    uint32 number = 2;
-    
-	    // Absolute start point of this read
-	    uint64 start_sample = 3;
-    
-	    // Absolute start point through the experiment of this chunk
-	    uint64 chunk_start_sample = 4;
-    
-	    // Length of the chunk in samples
-	    uint64 chunk_length = 5;
-    
-	    // All Classifications given to intermediate chunks by analysis
-	    repeated int32 chunk_classifications = 6;
-    
-	    // Any raw data selected by the request
+            // Read numbers always increment throughout the experiment, and are
+            // unique per channel - however they are not necessarily contiguous.
+            uint32 number = 2;
+            
+            // Absolute start point of this read
+            uint64 start_sample = 3;
+            
+            // Absolute start point through the experiment of this chunk
+            uint64 chunk_start_sample = 4;
+            
+            // Length of the chunk in samples
+            uint64 chunk_length = 5;
+            
+            // All Classifications given to intermediate chunks by analysis
+            repeated int32 chunk_classifications = 6;
+            
+            // Any raw data selected by the request
             //
-	    // The type of the elements will depend on whether calibrated data
-	    // was chosen. The get_data_types() RPC call should be used to
-	    // determine the precise format of the data, but in general terms,
-	    // uncalibrated data will be signed integers and calibrated data
-	    // will be floating-point numbers.
-	    bytes raw_data = 7;
-    
-	    // The median of the read previous to this read. intended to allow
-	    // querying of the approximate level of this read, comapred to the
-	    // last.
+            // The type of the elements will depend on whether calibrated data
+            // was chosen. The get_data_types() RPC call should be used to
+            // determine the precise format of the data, but in general terms,
+            // uncalibrated data will be signed integers and calibrated data
+            // will be floating-point numbers.
+            bytes raw_data = 7;
+            
+            // The median of the read previous to this read. intended to allow
+            // querying of the approximate level of this read, comapred to the
+            // last.
             //
-	    // For example, a user could try to verify this is a strand be
-	    // ensuring the median of the current read is lower than the
-	    // median_before level.
-	    float median_before = 8;
-    
-	    // The media pA level of this read from all aggregated read chunks
-	    // so far.
-	    float median = 9;
+            // For example, a user could try to verify this is a strand be
+            // ensuring the median of the current read is lower than the
+            // median_before level.
+            float median_before = 8;
+            
+            // The media pA level of this read from all aggregated read chunks
+            // so far.
+            float median = 9;
         };
-    
-	message ActionResponse {
+        
+        message ActionResponse {
             string action_id = 1;
-	    enum Response { SUCCESS = 0; FAILED_READ_FINISHED = 1; }
-	    Response response = 2;
+            enum Response { SUCCESS = 0; FAILED_READ_FINISHED = 1; }
+            Response response = 2;
         }
-    
-	// The number of samples collected before the first sample included in
-	// this response.
+        
+        // The number of samples collected before the first sample included is
+        // this response.
         //
-	// This gives the position of the first data point on each channel in
-	// the overall stream of data being acquired from the device (since this
-	// period of data acquisition was started).
-	uint64 samples_since_start = 1;
-    
-	// The number of seconds elapsed since data acquisition started.
+        // This gives the position of the first data point on each channel in
+        // the overall stream of data being acquired from the device (since this
+        // period of data acquisition was started).
+        uint64 samples_since_start = 1;
+        
+        // The number of seconds elapsed since data acquisition started.
         //
-	// This is the same as ``samples_since_start``, but expressed in
-	// seconds.
-	double seconds_since_start = 2;
-    
-	// In progress reads for the requested channels.
+        // This is the same as ``samples_since_start``, but expressed in
+        // seconds.
+        double seconds_since_start = 2;
+        
+        // In progress reads for the requested channels.
         //
-	// Sparsely populated as not all channels have new/incomplete reads.
-	map<uint32, ReadData> channels = 4;
-    
-	// List of repsonses to requested actions, informing the caller of
-	// results to requested unblocks or discards of data.
-	repeated ActionResponse action_reponses = 5;
+        // Sparsely populated as not all channels have new/incomplete reads.
+        map<uint32, ReadData> channels = 4;
+        
+        // List of repsonses to requested actions, informing the caller of
+        // results to requested unblocks or discards of data.
+        repeated ActionResponse action_reponses = 5;
     }
-
