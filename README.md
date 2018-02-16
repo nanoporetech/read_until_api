@@ -9,10 +9,16 @@ return call can be made to the server to unblock the read in progress.
 Installation
 ------------
 
+The client requires MinKNOW for MinION 18.02 or later (MinKNOW-Core 1.12).
+
 The package can be installed into MinKNOW's python environment using the python
 interpreter in the MinKNOW root directory. For example on Ubuntu:
 
     sudo /opt/ONT/MinKNOW/ont-python/bin/python setup.py install
+
+(The MinKNOW python is located at
+`/Applications/MinKNOW.app/Contents/Resources/ont-python/bin/python` on OSX
+and `c:\Program Files\OxfordNanopore\MinKNOW\ont-python\python.exe` on Windows).
 
 Installation of the package into other python environments is currently
 unsupported.
