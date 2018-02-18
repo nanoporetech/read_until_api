@@ -6,6 +6,12 @@ MinKNOW server to obtain read data in real-time. The data can be analysed in the
 way most fit for purpose, and a return call can be made to the server to unblock
 the read in progress.
 
+Developers are directed to the
+[Developer Channel](https://community.nanoporetech.com/posts/channels/developers)
+of the Nanopore Community for support (Issue reporting has been disabled on the
+github website).
+
+
 Installation
 ------------
 
