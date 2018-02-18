@@ -1,10 +1,10 @@
 Read Until
 ==========
 
-The Read Until API provides a mechanism for a client script to connect to a
-MinKNOW server. The server can be asked to push a raw data to the client script
-in real-time. The data can be analysed in the way most fit for purpose, and a
-return call can be made to the server to unblock the read in progress.
+The Read Until API provides a mechanism for an application to connect to a
+MinKNOW server to obtain read data in real-time. The data can be analysed in the
+way most fit for purpose, and a return call can be made to the server to unblock
+the read in progress.
 
 Installation
 ------------
@@ -18,7 +18,7 @@ interpreter in the MinKNOW root directory. For example on Ubuntu:
 
 (The MinKNOW python is located at
 `/Applications/MinKNOW.app/Contents/Resources/ont-python/bin/python` on OSX
-and `c:\Program Files\OxfordNanopore\MinKNOW\ont-python\python.exe` on Windows).
+and `C:\Program Files\OxfordNanopore\MinKNOW\ont-python\python.exe` on Windows).
 
 Installation of the package into other python environments is currently
 unsupported.
@@ -29,8 +29,8 @@ MinKNOW/ont-python/bin/):
    1.  `read_until_simple`: this serves as a simple test, and the code
        (module `read_until.simple`) demonstrates use of basic functionality
        for developers.
-   2.  `read_until_ident`: this is a rather more fully featured example of use
-       of the API to identify reads via basecalling and alignment. To run it
+   2.  `read_until_ident`: this is a rather more fully featured example, using
+       the API to identify reads via basecalling and alignment. To run it
        requires the optional dependencies of scrappy and mappy. The latter of
        these can be installed via `ont-python/bin/python -m pip install mappy`,
        whilst the former can be obtained from Oxford Nanopore Technologies'
@@ -40,10 +40,10 @@ MinKNOW/ont-python/bin/):
 Client Overview
 ---------------
 
-The python Read Until package provides a high level interface to requisite
-parts of MinKNOW's [gRPC](https://grpc.io/). Developer's can focus on creating
-rich analyses, rather than the lower level details of handling data that
-MinKNOW provides. The purpose of the read until functionality is to
+The python Read Until package provides a high level interface to requisite parts
+of MinKNOW's [gRPC](https://grpc.io/) interface. Developer's can focus on
+creating rich analyses, rather than the lower level details of handling the data
+that MinKNOW provides. The purpose of the read until functionality is to
 selectively, based on any conceiveable analysis, "unblock" sequencing channels
 to increases the time spent sequencing analytes of interest. MinKNOW can be
 requested to send a continuous stream of "read chunks" (of a configurable
@@ -73,9 +73,10 @@ of the client from reads which have already ended. A restriction of this
 approach is that consumers cannot combine data from multiple chunks of the same
 read. If this behaviour is required, a client can be constructed with an
 alternative implementation of a `ReadCache` (passed as a parameter on
-construction of the class). However since the effectiveness of a read until
-application depends crucially on the latency of analysis, it is recommended to
-design analyses which require as little data as possible.
+construction of the `ReadUntilClient` instance). However since the effectiveness
+of a read until application depends crucially on the latency of analysis, it is
+recommended to design analyses which require as little data as possible and set
+the received chunk size accordingly.
 
 For many developers the details of these queues may be unimportant, at least in
 getting started. Of more immediate importance are several methods of the
@@ -123,12 +124,89 @@ Extending the client
 --------------------
 
 The `ReadUntilClient` class has been implemented to provide an abstraction which
-does not require understanding a in-depth knowledge of the MinKNOW gRPC
-interface. To extend the client however some knowledge of the messages passed
-between MinKNOW and a client is required. Whilst the provided client shows how
-to contruct and decode basic messages, the following (an extract from Protocol
-Buffers definition files) serves as a more complete reference.
+does not require an in-depth knowledge of the MinKNOW gRPC interface. To extend
+the client however some knowledge of the messages passed between MinKNOW and a
+client is required. Whilst the provided client shows how to contruct and decode
+basic messages, the following (an extract from Protocol Buffers definition
+files) serves as a more complete reference.
 
+**Messages sent from a client to MinKNOW**
+
+    message GetLiveReadsRequest {
+        enum RawDataType {
+            // Don't change the previously specified setting for raw data sent
+            // with live reads note: If sent when there is no last setting, NONE
+            // is assumed.
+            KEEP_LAST = 0;
+            // No raw data required for live reads
+            NONE = 1;
+            // Calibrated raw data should be sent to the user with each read
+            CALIBRATED = 2;
+            // Uncalibrated data should be sent to the user with each read
+            UNCALIBRATED = 3;
+        }
+    
+        message UnblockAction {
+            // Duration of unblock in seconds.
+            double duration = 1;
+        }
+    
+        message StopFurtherData {}
+    
+        message Action {
+            string action_id = 1;
+
+            // Channel name to unblock
+            uint32 channel = 2;
+    
+            // Identifier for the read to act on. If the read requested is no
+            // longer in progress, the action fails.
+            oneof read { string id = 3; uint32 number = 4; }
+    
+            oneof action {
+                // Unblock a read and skip further data from this read.
+                UnblockAction unblock = 5;
+    
+                // Skip further data from this read, doesn't affect the read
+                // data.
+                StopFurtherData stop_further_data = 6;
+            }
+        }
+    
+        message StreamSetup {
+            // The first channel (inclusive) for which to return data. Note
+            // that channel numbering starts at 1.
+            uint32 first_channel = 1;
+    
+            // The last channel (inclusive) for which to return data.
+            uint32 last_channel = 2;
+    
+            // Specify the type of raw data to retrieve
+            RawDataType raw_data_type = 3;
+    
+            // Minimum chunk size read data is returned in.
+            uint64 sample_minimum_chunk_size = 4;
+        }
+    
+        message Actions { repeated Action actions = 2; }
+    
+        oneof request {
+            // Read setup request, initialises channel numbers and type of data
+            // returned. Must be specified in the first message sent to MinKNOW.
+            // Once MinKNOW has the first setup message reads are sent to the
+            // caller as requested. The user can then resend a setup message as
+            // frequently as they need to in order to reconfigure live reads -
+            // for example by changing if raw data is sent with reads or not.
+            StreamSetup setup = 1;
+    
+            // Actions to take given data returned to the user - can only be
+            // sent once the setup message above has been sent.
+            Actions actions = 2;
+        }
+    }
+
+
+**Messages received by a client from MinKNOW**
 
     message GetLiveReadsResponse {
         message ReadData {
@@ -136,10 +214,9 @@ Buffers definition files) serves as a more complete reference.
             // produced.
             string id = 1;
     
-            // The minknow assigned number of this read
-            //
-            // Read numbers always increment throughout the experiment, and are
-            // unique per channel - however they are not necessarily contiguous.
+            // The MinKNOW assigned number of this read. Read numbers always
+            // increment throughout the experiment, and are unique per channel,
+            // however they are not necessarily contiguous.
             uint32 number = 2;
             
             // Absolute start point of this read
@@ -154,20 +231,17 @@ Buffers definition files) serves as a more complete reference.
             // All Classifications given to intermediate chunks by analysis
             repeated int32 chunk_classifications = 6;
             
-            // Any raw data selected by the request
-            //
-            // The type of the elements will depend on whether calibrated data
-            // was chosen. The get_data_types() RPC call should be used to
-            // determine the precise format of the data, but in general terms,
-            // uncalibrated data will be signed integers and calibrated data
-            // will be floating-point numbers.
+            // Any raw data selected by the request. The type of the elements
+            // will depend on whether calibrated data was chosen. The
+            // get_data_types() RPC call should be used to determine the
+            // precise format of the data, but in general terms, uncalibrated
+            // data will be signed integers and calibrated data will be
+            // floating-point numbers.
             bytes raw_data = 7;
             
             // The median of the read previous to this read. intended to allow
             // querying of the approximate level of this read, comapred to the
-            // last.
-            //
-            // For example, a user could try to verify this is a strand be
+            // last. For example, a user could try to verify this is a strand be
             // ensuring the median of the current read is lower than the
             // median_before level.
             float median_before = 8;
@@ -184,25 +258,21 @@ Buffers definition files) serves as a more complete reference.
         }
         
         // The number of samples collected before the first sample included is
-        // this response.
-        //
-        // This gives the position of the first data point on each channel in
-        // the overall stream of data being acquired from the device (since this
-        // period of data acquisition was started).
+        // this response. This gives the position of the first data point on
+        // each channel in the overall stream of data being acquired from the
+        // device (since this period of data acquisition was started).
         uint64 samples_since_start = 1;
         
         // The number of seconds elapsed since data acquisition started.
-        //
         // This is the same as ``samples_since_start``, but expressed in
         // seconds.
         double seconds_since_start = 2;
         
-        // In progress reads for the requested channels.
-        //
-        // Sparsely populated as not all channels have new/incomplete reads.
+        // In progress reads for the requested channels. Sparsely populated as
+        // not all channels have new/incomplete reads.
         map<uint32, ReadData> channels = 4;
         
-        // List of repsonses to requested actions, informing the caller of
+        // List of responses to requested actions, informing the caller of
         // results to requested unblocks or discards of data.
         repeated ActionResponse action_reponses = 5;
     }
