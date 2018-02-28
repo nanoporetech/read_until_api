@@ -108,7 +108,7 @@ def divide_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=
     return action_counters
 
 
-def filter_targets(client, mapper, targets, batch_size=10, delay=1, throttle=0.1, control_group=16, unblock_unknown=False):
+def filter_targets(client, mapper, targets, batch_size=10, delay=1, throttle=0.1, control_group=16, unblock_unknown=False, basecalls_output=None):
     """Analysis using scrappy and mappy to accept/reject reads based on
     channel and identity as determined by alignment of basecall to
     reference. Channels are split into two groups (by division modulo
@@ -126,6 +126,7 @@ def filter_targets(client, mapper, targets, batch_size=10, delay=1, throttle=0.1
     :param unblock_unknown: whether or not to unblock reads which cannot be
         positively identified (i.e. show no alignment to reference whether
         on or off target).
+    :param basecalls_output: filename prefix for writing basecalls.
 
     :returns: a dictionary of Counters of actions taken per channel group.
 
@@ -134,8 +135,12 @@ def filter_targets(client, mapper, targets, batch_size=10, delay=1, throttle=0.1
     logger.info('Starting analysis of reads in {}s.'.format(delay))
     time.sleep(delay)
     thread_id = str(uuid4())
+    if basecalls_output is None:
+        basecalls_output = os.devnull
+    else:
+        basecalls_output = '{}_{}.fa'.format(basecalls_output, thread_id)
 
-    with open('ru_calls_{}.fa'.format(thread_id), 'w') as fasta:
+    with open(basecalls_output, 'w') as fasta:
         action_counters = defaultdict(Counter)
         max_pos = 0
         while client.is_running:
@@ -223,6 +228,8 @@ def main():
     parser.add_argument('--unblock_unknown', default=False,
         action='store_true',
         help='Inverse proportion of channels in control group.')
+    parser.add_argument('--basecalls_output', 
+        help='Filename prefix for on-the-fly basecalls.')
     args = parser.parse_args()
 
     logging.basicConfig(format='[%(asctime)s - %(name)s] %(message)s',
@@ -249,7 +256,7 @@ def main():
         analysis_function = functools.partial(
             filter_targets, read_until_client, mapper, regions,
             delay=args.analysis_delay, control_group=args.control_group,
-            unblock_unknown=args.unblock_unknown
+            unblock_unknown=args.unblock_unknown, basecalls_output=args.basecalls_output
         )
 
     with read_until_extras.ThreadPoolExecutorStackTraced() as executor:
