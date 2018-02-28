@@ -1,4 +1,4 @@
-from collections import Counter, OrderedDict 
+from collections import defaultdict, Counter, OrderedDict 
 import logging
 import sys
 from threading import Lock, Event
@@ -217,6 +217,8 @@ class ReadUntilClient(object):
         self.data_queue = self.CacheType(size=self.cache_size)
         # a flag to indicate where gRPC stream is being processed
         self.running = Event()
+        # stores all sent action ids -> unblock/stop
+        self.sent_actions = dict()
 
 
     @property
@@ -285,6 +287,7 @@ class ReadUntilClient(object):
         self.running.clear()
         self.action_queue = queue.Queue()
         self.data_queue = self.CacheType(size=self.cache_size)
+        self.sent_actions = dict()
         self.logger.info("Finished processing gRPC stream.")
 
 
@@ -333,6 +336,7 @@ class ReadUntilClient(object):
             'channel': read_channel,
             'number': read_number,
         }
+        self.sent_actions[action_id] = action
         if action == 'stop_further_data':
             action_kwargs[action] = self.msgs.GetLiveReadsRequest.StopFurtherData()
         elif action == 'unblock':
@@ -413,7 +417,7 @@ class ReadUntilClient(object):
         :param reads: gRPC data stream iterable as produced by get_live_reads().
         
         """
-        response_counter = Counter()
+        response_counter = defaultdict(Counter)
 
         unique_reads = set()
 
@@ -429,7 +433,8 @@ class ReadUntilClient(object):
             # record a count of success and fails            
             if len(reads_chunk.action_reponses):
                 for response in reads_chunk.action_reponses:
-                    response_counter[response.response] += 1
+                    action_type = self.sent_actions[response.action_id]
+                    response_counter[action_type][response.response] += 1
 
             progress = self.aquisition_progress
             for read_channel in reads_chunk.channels:
