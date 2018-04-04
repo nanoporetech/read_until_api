@@ -11,6 +11,7 @@ Developers are directed to the
 of the Nanopore Community for support (Issue reporting has been disabled on the
 github website).
 
+![Read Until Example](https://github.com/nanoporetech/read_until_api/raw/dev/read_until.gif)
 
 Installation
 ------------

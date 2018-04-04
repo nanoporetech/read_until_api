@@ -50,7 +50,7 @@ def divide_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=
     time.sleep(delay)
 
     logger.info('Loading index')
-    mapper = mappy.Aligner(map_index, preset='map_ont')
+    mapper = mappy.Aligner(map_index, preset='map_ont') 
 
     action_counters = defaultdict(Counter)
     max_pos = 0
