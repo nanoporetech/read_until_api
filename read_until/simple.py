@@ -33,6 +33,8 @@ class ThreadPoolExecutorStackTraced(concurrent.futures.ThreadPoolExecutor):
 
 def _get_parser():
     parser = argparse.ArgumentParser('Read until API demonstration..')
+    parser.add_argument('--host', default=127.0.0.1,
+        help='MinKNOW server host.')
     parser.add_argument('--port', type=int, default=8000,
         help='MinKNOW server port.')
     parser.add_argument('--workers', default=1, type=int,
@@ -110,7 +112,8 @@ def main():
     logger = logging.getLogger('Manager')
 
     read_until_client = read_until.ReadUntilClient(
-        mk_port=args.port, one_chunk=args.one_chunk, filter_strands=True)
+        mk_host=args.host, mk_port=args.port,
+        one_chunk=args.one_chunk, filter_strands=True)
 
     # this somewhat assumes we get at least two threads ;)
     with ThreadPoolExecutorStackTraced() as executor:

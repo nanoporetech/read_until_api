@@ -237,8 +237,8 @@ def main():
     logger = logging.getLogger('Manager')
 
     read_until_client = read_until.ReadUntilClient(
-        mk_port=args.port, one_chunk=args.one_chunk, filter_strands=True
-    )
+        mk_host=args.host, mk_port=args.port,
+        one_chunk=args.one_chunk, filter_strands=True)
 
     if args.targets is None:
         analysis_function = functools.partial(
