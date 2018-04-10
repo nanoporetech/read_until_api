@@ -147,8 +147,8 @@ def filter_targets(client, mapper, targets, batch_size=10, delay=1, throttle=0.1
             t0 = time.time()
             read_batch = client.get_read_chunks(batch_size=batch_size, last=True)
             for channel, read in read_batch:
-                channel_group = 'control' if (channel % control_group) else 'test'
-                if channel_group == 'test':
+                channel_group = 'test' if (channel % control_group) else 'control'
+                if channel_group == 'control':
                     # leave these channels alone
                     logger.debug('Skipping channel {}({}).'.format(channel, 0))
                     action_counters[channel_group]['skipped'] += 1
