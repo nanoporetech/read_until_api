@@ -33,7 +33,7 @@ class ThreadPoolExecutorStackTraced(concurrent.futures.ThreadPoolExecutor):
 
 def _get_parser():
     parser = argparse.ArgumentParser('Read until API demonstration..')
-    parser.add_argument('--host', default=127.0.0.1,
+    parser.add_argument('--host', default='127.0.0.1',
         help='MinKNOW server host.')
     parser.add_argument('--port', type=int, default=8000,
         help='MinKNOW server port.')
