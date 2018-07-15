@@ -28,9 +28,8 @@ interpreter in the MinKNOW root directory. For example on Ubuntu:
 and `C:\Program Files\OxfordNanopore\MinKNOW\ont-python\python.exe` on Windows).
 
 Installation of the package into other python environments is currently
-unsupported.
-
-**Edit 12/07/18** - Added a walkthrough to install MinKNOW + read_until_api + third party Python package (pytorch) for Linux in [Installation_example file](./Installation_example.md)
+unsupported. An example installation process for Ubuntu including installing
+additional python modules can be found in [Ubuntu Install](./UBUNTUINSTALL.md).
 
 Two demonstration programs are provided (and are installed into
 MinKNOW/ont-python/bin/):
