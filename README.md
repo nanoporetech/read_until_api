@@ -29,7 +29,7 @@ and `C:\Program Files\OxfordNanopore\MinKNOW\ont-python\python.exe` on Windows).
 
 Installation of the package into other python environments is currently
 unsupported. An example installation process for Ubuntu including installing
-additional python modules can be found in [Ubuntu Install](./UBUNTUINSTALL.md).
+additional python modules can be found in [Ubuntu Install](./INSTALL.md).
 
 Two demonstration programs are provided (and are installed into
 MinKNOW/ont-python/bin/):
