@@ -29,17 +29,23 @@ experiment. After starting playback, from a commandline run:
 
     sudo /opt/ONT/MinKNOW/ont-python/bin/python <path/to/>read_until_api/read_until/simple.py --verbose
 
+Finally restart the computer.
+
+
+**Other python libraries**
+
+The following are instructions for installing selected additional python libraries.
+
 To use the more involved examples from the Read Until API, install `scrappy` and
 `mappy`:
 
     sudo /opt/ONT/MinKNOW/ont-python/bin/python -m pip install scrappy mappy
 
+
 Installing `pytorch` requires using the Python 2.7 UCS2 wheel:
 
     sudo /opt/ONT/MinKNOW/ont-python/bin/python -m pip install http://download.pytorch.org/whl/cpu/torch-0.4.0-cp27-cp27m-linux_x86_64.whl
     sudo /opt/ONT/MinKNOW/ont-python/bin/python -m pip install torchvision 
-
-Finally restart the computer.
 
 
 Trouble Shooting
