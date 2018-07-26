@@ -133,9 +133,10 @@ def _new_thread_name(template="read_until-%d"):
     return template % _counter()
 
 
-# The maximum allowed minimum read chunk size, large chunks
-#    can cause failures in gRPC.
-ALLOWED_MIN_CHUNK_SIZE = 3500
+# The maximum allowed minimum read chunk size. Filtering of small read chunks
+#    from the gRPC stream is buggy. The value 0 effectively disables the 
+#    filtering functionality.
+ALLOWED_MIN_CHUNK_SIZE = 0
 
 
 class ReadUntilClient(object):
@@ -382,6 +383,7 @@ class ReadUntilClient(object):
         :param action_batch: maximum number of actions to batch in a single response.
 
         """
+        # see note at top of this module
         if min_chunk_size > ALLOWED_MIN_CHUNK_SIZE:
             self.logger.warning("Reducing min_chunk_size to {}".format(ALLOWED_MIN_CHUNK_SIZE))
             min_chunk_size = ALLOWED_MIN_CHUNK_SIZE

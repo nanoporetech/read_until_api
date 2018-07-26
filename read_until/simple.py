@@ -54,7 +54,8 @@ def _get_parser():
     parser.add_argument('--one_chunk', default=False, action='store_true',
         help='Minimum read chunk size to receive.')
     parser.add_argument('--min_chunk_size', type=int, default=2000,
-        help='Minimum read chunk size to receive.')
+        help='Minimum read chunk size to receive. NOTE: this functionality '
+             'is currently disabled; read chunks received will be unfiltered.')
     parser.add_argument(
         '--debug', help="Print all debugging information",
         action="store_const", dest="log_level",
