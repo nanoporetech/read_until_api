@@ -1,7 +1,8 @@
 from collections import defaultdict, Counter, OrderedDict 
+from itertools import count as _count
 import logging
 import sys
-from threading import Lock, Event
+from threading import Lock, Event, Thread
 import time
 import uuid
 
@@ -125,9 +126,19 @@ def _format_iter(data):
     return result
 
 
+# Helper to generate new thread names
+_counter = _count().next
+_counter()
+def _new_thread_name(template="read_until-%d"):
+    return template % _counter()
+
+
+# The maximum allowed minimum read chunk size, large chunks
+#    can cause failures in gRPC.
+ALLOWED_MIN_CHUNK_SIZE = 3500
+
+
 class ReadUntilClient(object):
-    # The maximum allowed minimum read chunk size
-    ALLOWED_MIN_CHUNK_SIZE = 4000
 
     def __init__(self, mk_host='127.0.0.1', mk_port=8000, cache_size=512, cache_type=ReadCache,
                  filter_strands=True, one_chunk=True, prefilter_classes={'strand', 'adapter'}):
@@ -151,17 +162,34 @@ class ReadUntilClient(object):
         To set up and use a client:
 
         >>> read_until_client = ReadUntilClient()
-        >>> with ThreadPoolExecutor() as executor:
-        ...     executor.submit(read_until_client.run,
-        ...                     runner_kwargs={'run_time':args.run_time}))
 
+        This creates an initial connection to a MinKNOW instance in 
+        preparation for setting up live reads stream. To initiate the stream:
+
+        >>> read_until_client.run()
+
+        The client is now recieving data and can send s
         Calls to methods of `read_until_client` can then be made in a separate
         thread. For example an continually running analysis function can be
         submitted to the executor as:
 
         >>> def analysis(client, *args, **kwargs):
-        ...     pass
-        >>> executor.submit(analysis_function, read_until_client)
+        ...     while client.is_running:
+        ...         for channel, read in client.get_read_chunks():
+        ...             raw_data = numpy.fromstring(read.raw_data, client.signal_dtype)
+        ...             # do something with raw data... and maybe call:
+        ...             #    client.stop_receiving_read(channel, read.number)
+        ...             #    client.unblock_read(channel, read.number)
+        >>> with ThreadPoolExecutor() as executor:
+        ...     executor.submit(analysis_function, read_until_client)
+
+        To stop processing the gRPC read stream:
+
+        >>> read_until_client.reset()
+
+        If an analysis function is set up as above in response to
+        `client.is_running`, calling the above call will cause the
+        analysis function to return.
 
         """
         self.logger = logging.getLogger('ReadUntil')
@@ -210,13 +238,51 @@ class ReadUntilClient(object):
 
         self.signal_dtype = self.device.numpy_data_types.calibrated_signal
 
+        # setup the queues and running status
+        self._process_thread = None
+        self.reset()
+
+
+    def run(self, **kwargs):
+        """Run Read Until analysis.
+
+        :param **kwargs: keywork args for gRPC stream setup. Valid keys are:
+            `first_channel`, `last_channel`, `raw_data_type`, and
+            `sample_minimum_chunk_size`.
+        """
+        self._process_thread = Thread(
+            target=self._run,
+            name=_new_thread_name(),
+            kwargs=kwargs
+        )
+        self._process_thread.start()
+        self.logger.info("Processing started")
+
+
+    def reset(self, timeout=5):
+        """Reset the state of the client to an initial (not running) state with
+        no data or requests in queues.
+
+        """
+        # self._process_reads is blocking => it runs in a thread.
+        if self._process_thread is not None:
+            self.logger.info("Reset request received, shutting down...")
+            self.running.clear()
+            self._process_thread.join(timeout=timeout)
+            if self._process_thread.is_alive():
+                self.logger.warn("Stream handler did not finish correctly.")
+            else:
+                self.logger.info("Stream handler exited successfully.")
+        self._process_thread = None
+
+        # a flag to indicate whether gRPC stream is being processed. Any
+        #    running ._runner() will respond to this.
+        self.running = Event()
         # the action_queue is used to store unblock/stop_receiving_data
         #    requests before they are put on the gRPC stream.
         self.action_queue = queue.Queue()
         # the data_queue is used to store the latest chunk per channel
         self.data_queue = self.CacheType(size=self.cache_size)
-        # a flag to indicate where gRPC stream is being processed
-        self.running = Event()
         # stores all sent action ids -> unblock/stop
         self.sent_actions = dict()
 
@@ -260,37 +326,6 @@ class ReadUntilClient(object):
         return self.running.is_set()
 
 
-    def run(self, runner_kwargs={'run_time':30}):
-        """Run Read Until analysis.
-
-        :param runner_kwargs: kwargs for ._runner() method.
-
-        .. note:: this method is blocking so requires being run in a thread
-            to allow the caller access to the read data.
-
-        """
-        self.running.set()
-        # .get_live_reads() takes an iterable of requests and generates
-        #    raw data chunks and responses to our requests: the iterable
-        #    thereby controls the lifetime of the stream. ._runner() as
-        #    implemented below initialises the stream then transfers
-        #    action requests from the action_queue to the stream.
-        reads = self.connection.data.get_live_reads(
-            self._runner(**runner_kwargs)
-        )
-
-        # ._process_reads() as implemented below is responsible for
-        #    placing action requests on the queue and logging the responses
-        self._process_reads(reads)
-
-        # reset
-        self.running.clear()
-        self.action_queue = queue.Queue()
-        self.data_queue = self.CacheType(size=self.cache_size)
-        self.sent_actions = dict()
-        self.logger.info("Finished processing gRPC stream.")
-
-
     def get_read_chunks(self, batch_size=1, last=True):
         """Get read chunks, removing them from the queue.
 
@@ -321,52 +356,35 @@ class ReadUntilClient(object):
         self._put_action(read_channel, read_number, 'stop_further_data')
 
 
-    def _put_action(self, read_channel, read_number, action):
-        """Stores an action requests on the queue ready to be placed on the
-        gRPC stream.
+    def _run(self, **kwargs):
+        self.running.set()
+        # .get_live_reads() takes an iterable of requests and generates
+        #    raw data chunks and responses to our requests: the iterable
+        #    thereby controls the lifetime of the stream. ._runner() as
+        #    implemented below initialises the stream then transfers
+        #    action requests from the action_queue to the stream.
+        reads = self.connection.data.get_live_reads(
+            self._runner(**kwargs)
+        )
 
-        :param read_channel: a read's channel number.
-        :param read_number: a read's read number (the nth read per channel).
-        :param action: either 'stop_further_data' or 'unblock'.
-
-        """
-        action_id = str(uuid.uuid4())
-        action_kwargs = {
-            'action_id': action_id,
-            'channel': read_channel,
-            'number': read_number,
-        }
-        self.sent_actions[action_id] = action
-        if action == 'stop_further_data':
-            action_kwargs[action] = self.msgs.GetLiveReadsRequest.StopFurtherData()
-        elif action == 'unblock':
-            action_kwargs[action] = self.msgs.GetLiveReadsRequest.UnblockAction()
-        else:
-            raise ValueError("'action' parameter must must be 'stop_further_data' or 'unblock'.")
-        
-        action_request = self.msgs.GetLiveReadsRequest.Action(**action_kwargs)
-        self.action_queue.put(action_request)
-        self.logger.debug('Action {} on channel {}, read {} : {}'.format(
-            action_id, read_channel, read_number, action
-        ))
+        # ._process_reads() as implemented below is responsible for
+        #    placing action requests on the queue and logging the responses
+        self._process_reads(reads)
 
 
-    def _runner(self, run_time, first_channel=1, last_channel=512, min_chunk_size=2000, action_batch=1000, action_throttle=0.001):
+    def _runner(self, first_channel=1, last_channel=512, min_chunk_size=ALLOWED_MIN_CHUNK_SIZE, action_batch=1000, action_throttle=0.001):
         """Yield the stream initializer request followed by action requests
         placed into the action_queue.
 
-        :param run_time: maximum time for which to yield actions.
         :param first_channel: lowest channel for which to receive raw data.
         :param last_channel: highest channel (inclusive) for which to receive data.
-        :param min_chunk_size: minimum number of raw samples in an raw data chunk.
+        :param min_chunk_size: minimum number of raw samples in a raw data chunk.
         :param action_batch: maximum number of actions to batch in a single response.
 
         """
-        timeout_pt = time.time() + run_time
-
-        if min_chunk_size > self.ALLOWED_MIN_CHUNK_SIZE:
-            self.logger.warning("Reducing min_chunk_size to {}".format(self.ALLOWED_MIN_CHUNK_SIZE))
-            min_chunk_size = self.ALLOWED_MIN_CHUNK_SIZE
+        if min_chunk_size > ALLOWED_MIN_CHUNK_SIZE:
+            self.logger.warning("Reducing min_chunk_size to {}".format(ALLOWED_MIN_CHUNK_SIZE))
+            min_chunk_size = ALLOWED_MIN_CHUNK_SIZE
 
         self.logger.info(
             "Sending init command, channels:{}-{}, min_chunk:{}".format(
@@ -381,9 +399,8 @@ class ReadUntilClient(object):
             )
         )
 
-        self.logger.info("Running Read Until for {} seconds.".format(run_time))
         t0 = time.time()
-        while t0 < timeout_pt:
+        while self.is_running:
             t0 = time.time()
             # get as many items as we can up to the maximum, without blocking
             actions = list()
@@ -407,8 +424,8 @@ class ReadUntilClient(object):
             t1 = time.time()
             if t0 + action_throttle > t1:
                 time.sleep(action_throttle + t0 - t1)
-
-        self.logger.info("Stream finished after timeout.")
+        else:
+            self.logger.info("Reset signal received by action handler.")
 
 
     def _process_reads(self, reads):
@@ -426,6 +443,9 @@ class ReadUntilClient(object):
         raw_data_bytes = 0
         last_msg_time = time.time()
         for reads_chunk in reads:
+            if not self.is_running:
+                self.logger.info('Stopping processing of reads due to reset.')
+                break
             # In each iteration, we get:
             #   i) responses to our previous actions (success/fail)
             #  ii) raw data for current reads
@@ -479,5 +499,35 @@ class ReadUntilClient(object):
                 samples_behind = 0
                 raw_data_bytes = 0
                 last_msg_time = now
+
+
+    def _put_action(self, read_channel, read_number, action):
+        """Stores an action requests on the queue ready to be placed on the
+        gRPC stream.
+
+        :param read_channel: a read's channel number.
+        :param read_number: a read's read number (the nth read per channel).
+        :param action: either 'stop_further_data' or 'unblock'.
+
+        """
+        action_id = str(uuid.uuid4())
+        action_kwargs = {
+            'action_id': action_id,
+            'channel': read_channel,
+            'number': read_number,
+        }
+        self.sent_actions[action_id] = action
+        if action == 'stop_further_data':
+            action_kwargs[action] = self.msgs.GetLiveReadsRequest.StopFurtherData()
+        elif action == 'unblock':
+            action_kwargs[action] = self.msgs.GetLiveReadsRequest.UnblockAction()
+        else:
+            raise ValueError("'action' parameter must must be 'stop_further_data' or 'unblock'.")
+        
+        action_request = self.msgs.GetLiveReadsRequest.Action(**action_kwargs)
+        self.action_queue.put(action_request)
+        self.logger.debug('Action {} on channel {}, read {} : {}'.format(
+            action_id, read_channel, read_number, action
+        ))
 
 

@@ -41,6 +41,13 @@ To use the more involved examples from the Read Until API, install `scrappy` and
 
     sudo /opt/ONT/MinKNOW/ont-python/bin/python -m pip install scrappy mappy
 
+To use the `scrappy` basecaller efficiently it is important to set your blas
+library to be single threaded, this is ordinarily done with:
+
+    export OPENBLAS_NUM_THREADS=1
+
+Failure to do this will result in slow basecalling and the Read Until client
+failing to process reads in timely manner.
 
 Installing `pytorch` requires using the Python 2.7 UCS2 wheel:
 

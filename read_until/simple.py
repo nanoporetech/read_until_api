@@ -1,6 +1,10 @@
 import argparse
 import concurrent.futures
+import functools
 import logging
+from multiprocessing.pool import ThreadPool
+from multiprocessing import TimeoutError
+import signal
 import sys
 import traceback
 import time
@@ -29,6 +33,10 @@ class ThreadPoolExecutorStackTraced(concurrent.futures.ThreadPoolExecutor):
             return fn(*args, **kwargs)
         except Exception:
             raise sys.exc_info()[0](traceback.format_exc())
+
+
+def ignore_sigint():
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
 def _get_parser():
@@ -100,8 +108,60 @@ def simple_analysis(client, batch_size=10, delay=1, throttle=0.1):
         t1 = time.time()
         if t0 + throttle > t1:
             time.sleep(throttle + t0 - t1)
- 
-    logger.info('Finished analysis of reads.')
+    else:
+        logger.info('Finished analysis of reads as client stopped.')
+
+
+def run_workflow(client, analysis_worker, n_workers, run_time,
+                 runner_kwargs=dict()):
+    """Run an analysis function against a ReadUntilClient.
+
+    :param client: `ReadUntilClient` instance.
+    :param analysis worker: a function to process reads. It should exit in
+        response to `client.is_running == False`.
+    :param n_workers: number of incarnations of `analysis_worker` to run.
+    :param run_time: time (in seconds) to run workflow.
+    :param runner_kwargs: keyword arguments for `client.run()`. 
+
+    :returns: a list of results, on item per worker.
+
+    """
+    logger = logging.getLogger('Manager')
+
+    results = []
+    try:
+        # start the client
+        client.run(**runner_kwargs)
+        # start a pool of workers
+        pool = ThreadPool(n_workers) # initializer=ignore_sigint)
+        logger.info("Creating {} workers".format(n_workers))
+        for _ in range(n_workers):
+            results.append(pool.apply_async(analysis_worker))
+        pool.close()
+        # wait a bit before closing down
+        time.sleep(run_time)
+        logger.info("Sending reset")
+        client.reset()
+        pool.join()
+    except KeyboardInterrupt:
+        logger.info("Caught ctrl-c, terminating workflow.")
+        client.reset()
+        pool.terminate()
+
+    # collect results (if any)
+    collected = []
+    for result in results:
+        try:
+            
+            res = result.get(3)
+        except TimeoutError:
+            logger.warn("Worker function did not exit successfully.")
+            collected.append(None)
+        except Exception as e:
+            logger.warn("Worker raise exception: {}".format(repr(e)))
+        else:
+            collected.append(res)
+    return collected
 
 
 def main():
@@ -109,25 +169,18 @@ def main():
 
     logging.basicConfig(format='[%(asctime)s - %(name)s] %(message)s',
         datefmt='%H:%M:%S', level=args.log_level)
-    logger = logging.getLogger('Manager')
 
     read_until_client = read_until.ReadUntilClient(
         mk_host=args.host, mk_port=args.port,
         one_chunk=args.one_chunk, filter_strands=True)
 
-    # this somewhat assumes we get at least two threads ;)
-    with ThreadPoolExecutorStackTraced() as executor:
-        futures = list()
-        futures.append(executor.submit(
-            read_until_client.run, runner_kwargs={
-                'run_time':args.run_time, 'min_chunk_size':args.min_chunk_size
-            }
-        ))
-        for _ in range(args.workers):
-            futures.append(executor.submit(
-                simple_analysis, read_until_client, delay=args.analysis_delay
-            ))
+    analysis_worker = functools.partial(
+        simple_analysis, read_until_client, delay=args.analysis_delay)
 
-        for f in concurrent.futures.as_completed(futures):
-            if f.exception() is not None:
-                logger.warning(f.exception())
+    results = run_workflow(
+        read_until_client, analysis_worker, args.workers, args.run_time,
+        runner_kwargs={
+            'min_chunk_size':args.min_chunk_size
+        }
+    )
+    # simple analysis doesn't return results

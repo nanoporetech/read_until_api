@@ -39,10 +39,12 @@ MinKNOW/ont-python/bin/):
        for developers.
    2.  `read_until_ident`: this is a rather more fully featured example, using
        the API to identify reads via basecalling and alignment. To run it
-       requires the optional dependencies of scrappy and mappy. The latter of
-       these can be installed via `ont-python/bin/python -m pip install mappy`,
-       whilst the former can be obtained from Oxford Nanopore Technologies'
-       github [repository](https://github.com/nanoporetech/scrappie).
+       requires the optional dependencies of scrappy and mappy. These can be
+       installed via `ont-python/bin/python -m pip install mappy scrappie`.
+       To use the `scrappy` basecaller efficiently it is important to set blas
+       the blas library to be single threaded, this is ordinarily done with:
+
+           export OPENBLAS_NUM_THREADS=1
 
 
 Client Overview
@@ -91,8 +93,7 @@ getting started. Of more immediate importance are several methods of the
 `ReadUntilClient` class:
 
 *`.run()`*
-instruct the class to start retrieving read chunks from MinKNOW. This should be
-run in a thread (see below for one approach).
+instruct the class to start retrieving read chunks from MinKNOW.
 
 *`.get_read_chunks()`*
 obtain the most recent data retrieved from MinKNOW.
@@ -123,8 +124,8 @@ reduced to:
                 #    client.unblock_read(channel, read.number)
     
     read_until_client = ReadUntilClient()
+    read_until_client.run()
     with ThreadPoolExecutor() as executor:
-        executor.submit(read_until_client.run)
         executor.submit(analysis, read_until_client)
 
 

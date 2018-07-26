@@ -2,6 +2,7 @@ from collections import defaultdict, Counter
 import concurrent
 import functools
 import logging
+import os
 import random
 import sys
 import time
@@ -259,40 +260,36 @@ def main():
             unblock_unknown=args.unblock_unknown, basecalls_output=args.basecalls_output
         )
 
-    with read_until_extras.ThreadPoolExecutorStackTraced() as executor:
-        futures = list()
-        futures.append(executor.submit(
-            read_until_client.run, runner_kwargs={
-                'run_time':args.run_time, 'min_chunk_size':args.min_chunk_size
-            }
-        ))
-        # Launch several incarnations of the worker, this is a rather inelegant
-        #    form of parallelism.
-        for _ in range(args.workers):
-            futures.append(executor.submit(analysis_function))
+    # run read until, and capture statistics
+    action_counters = read_until_extras.run_workflow(
+        read_until_client, analysis_function, args.workers, args.run_time,
+        runner_kwargs={
+            'min_chunk_size':args.min_chunk_size
+        }
+    )
 
-        total_counters = defaultdict(Counter)
-        for f in concurrent.futures.as_completed(futures):
-            if f.exception() is not None:
-                logger.warning(f.exception())
-            elif isinstance(f.result(), defaultdict):
-                new_counts = f.result()
-                all_keys = set(total_counters.keys()) | set(new_counts.keys())
-                for key in all_keys:
-                    total_counters[key] += new_counts[key]
+    # summarise statatistics
+    total_counters = defaultdict(Counter)
+    for worker_counts in action_counters:
+        if worker_counts is None:
+            logger.warn('A worker failed to return data.')
+        else:
+            all_keys = set(total_counters.keys()) | set(worker_counts.keys())
+            for key in all_keys:
+                total_counters[key] += worker_counts[key]
 
-        groups = list(total_counters.keys())
-        actions = set()
-        for group in groups:
-            actions |= set(total_counters[group].keys())
-        
-        msg = ['Action summary:', '\t'.join(('group', 'action'.ljust(9), 'count'))]
-        for group in groups:
-            for action in actions:
-                msg.append(
-                    '\t'.join((str(x) for x in (
-                        group, str(action).ljust(9), total_counters[group][action]
-                    )))
-                )
-        msg = '\n'.join(msg)
-        logger.info(msg)
+    groups = list(total_counters.keys())
+    actions = set()
+    for group in groups:
+        actions |= set(total_counters[group].keys())
+    
+    msg = ['Action summary:', '\t'.join(('group', 'action'.ljust(9), 'count'))]
+    for group in groups:
+        for action in actions:
+            msg.append(
+                '\t'.join((str(x) for x in (
+                    group, str(action).ljust(9), total_counters[group][action]
+                )))
+            )
+    msg = '\n'.join(msg)
+    logger.info(msg)
