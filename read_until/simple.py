@@ -130,12 +130,12 @@ def run_workflow(client, analysis_worker, n_workers, run_time,
     logger = logging.getLogger('Manager')
 
     results = []
+    pool = ThreadPool(n_workers) # initializer=ignore_sigint)
+    logger.info("Creating {} workers".format(n_workers))
     try:
         # start the client
         client.run(**runner_kwargs)
         # start a pool of workers
-        pool = ThreadPool(n_workers) # initializer=ignore_sigint)
-        logger.info("Creating {} workers".format(n_workers))
         for _ in range(n_workers):
             results.append(pool.apply_async(analysis_worker))
         pool.close()
@@ -147,13 +147,11 @@ def run_workflow(client, analysis_worker, n_workers, run_time,
     except KeyboardInterrupt:
         logger.info("Caught ctrl-c, terminating workflow.")
         client.reset()
-        pool.terminate()
 
     # collect results (if any)
     collected = []
     for result in results:
         try:
-            
             res = result.get(3)
         except TimeoutError:
             logger.warn("Worker function did not exit successfully.")
@@ -161,7 +159,9 @@ def run_workflow(client, analysis_worker, n_workers, run_time,
         except Exception as e:
             logger.warn("Worker raise exception: {}".format(repr(e)))
         else:
+            logger.info("Worker exited successfully.")
             collected.append(res)
+    pool.terminate()
     return collected
 
 

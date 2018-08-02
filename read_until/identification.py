@@ -104,7 +104,8 @@ def divide_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=
         if t0 + throttle > t1:
             time.sleep(throttle + t0 - t1)
 
-    logger.info('Finished analysis of reads.')
+    # end while loop
+    logger.info('Received client stop signal.')
 
     return action_counters
 
@@ -213,7 +214,8 @@ def filter_targets(client, mapper, targets, batch_size=10, delay=1, throttle=0.1
             if t0 + throttle > t1:
                 time.sleep(throttle + t0 - t1)
 
-        logger.info('Finished analysis of reads.')
+        # end while loop
+        logger.info('Received client stop signal.')
 
     return action_counters
 
