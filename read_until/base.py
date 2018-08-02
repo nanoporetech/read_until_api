@@ -370,7 +370,12 @@ class ReadUntilClient(object):
 
         # ._process_reads() as implemented below is responsible for
         #    placing action requests on the queue and logging the responses.
-        self._process_reads(reads)
+        #    We really want to be calling reads.cancel() below so catch
+        #    everything and anything.
+        try:
+            self._process_reads(reads)
+        except Exception as e:
+            self.logger.info(e)
 
         # signal to the server that we are done with the stream.
         reads.cancel()
