@@ -27,7 +27,7 @@ def basecall_data(raw):
     return seq, score
 
 
-def divide_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=1, throttle=0.1):
+def divide_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=1, throttle=0.1, unblock_duration=0.1):
     """Analysis using scrappy and mappy to accept/reject reads based on
     channel and identity as determined by alignment of basecall to
     reference. Channels are split into three groups (by division modulo 3
@@ -42,6 +42,7 @@ def divide_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=
     :param batch_size: number of reads to pull from `client` at a time.
     :param delay: number of seconds to wait before starting analysis.
     :param throttle: minimum interval between requests to `client`.
+    :param unblock_duration: time in seconds to apply unblock voltage.
 
     :returns: a dictionary of Counters of actions taken per channel group.
 
@@ -92,7 +93,7 @@ def divide_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=
                         # Bad read for channel
                         action_counters[channel_group]['unblock'] += 1
                         logger.debug('Unblocking channel {}({}) ref:{}.'.format(channel, channel_group, align.r_st))
-                        client.unblock_read(channel, read.number)
+                        client.unblock_read(channel, read.number, duration=unblock_duration)
                     else:
                         # Good read for channel
                         action_counters[channel_group]['stop'] += 1
@@ -110,7 +111,7 @@ def divide_analysis(client, map_index, genome_cut=2200000, batch_size=10, delay=
     return action_counters
 
 
-def filter_targets(client, mapper, targets, batch_size=10, delay=1, throttle=0.1, control_group=16, unblock_unknown=False, basecalls_output=None):
+def filter_targets(client, mapper, targets, batch_size=10, delay=1, throttle=0.1, control_group=16, unblock_unknown=False, basecalls_output=None, unblock_duration=0.1):
     """Analysis using scrappy and mappy to accept/reject reads based on
     channel and identity as determined by alignment of basecall to
     reference. Channels are split into two groups (by division modulo
@@ -129,6 +130,7 @@ def filter_targets(client, mapper, targets, batch_size=10, delay=1, throttle=0.1
         positively identified (i.e. show no alignment to reference whether
         on or off target).
     :param basecalls_output: filename prefix for writing basecalls.
+    :param unblock_duration: time in seconds to apply unblock voltage.
 
     :returns: a dictionary of Counters of actions taken per channel group.
 
@@ -197,7 +199,7 @@ def filter_targets(client, mapper, targets, batch_size=10, delay=1, throttle=0.1
                         action_counters[channel_group][hit] += 1
                         if unblock:
                             logger.debug('Unblocking channel {}:{}:{}.'.format(channel, read.number, read.chunk_start_sample))
-                            client.unblock_read(channel, read.number)
+                            client.unblock_read(channel, read.number, duration=unblock_duration)
                             fasta_action = '{}/unblocked'.format(hit)
                         else:
                             logger.debug('Good channel {}:{}:{}, aligns to {}.'.format(channel, read.number, read.chunk_start_sample, hit))
@@ -246,7 +248,8 @@ def main():
     if args.targets is None:
         analysis_function = functools.partial(
             divide_analysis, read_until_client, args.map_index,
-            delay=args.analysis_delay
+            delay=args.analysis_delay,
+            unblock_duration=args.unblock_duration,
         )
     else:
         logger.info('Loading index')
@@ -259,7 +262,8 @@ def main():
         analysis_function = functools.partial(
             filter_targets, read_until_client, mapper, regions,
             delay=args.analysis_delay, control_group=args.control_group,
-            unblock_unknown=args.unblock_unknown, basecalls_output=args.basecalls_output
+            unblock_unknown=args.unblock_unknown, basecalls_output=args.basecalls_output,
+            unblock_duration=args.unblock_duration,
         )
 
     # run read until, and capture statistics

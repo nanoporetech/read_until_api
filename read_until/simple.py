@@ -51,6 +51,8 @@ def _get_parser():
         help='Period to wait before starting analysis.')
     parser.add_argument('--run_time', type=int, default=30,
         help='Period to run the analysis.')
+    parser.add_argument('--unblock_duration', type=float, default=0.1,
+        help='Time (in seconds) to apply unblock voltage.')
     parser.add_argument('--one_chunk', default=False, action='store_true',
         help='Minimum read chunk size to receive.')
     parser.add_argument('--min_chunk_size', type=int, default=2000,
@@ -69,7 +71,7 @@ def _get_parser():
     return parser
 
 
-def simple_analysis(client, batch_size=10, delay=1, throttle=0.1):
+def simple_analysis(client, batch_size=10, delay=1, throttle=0.1, unblock_duration=0.1):
     """A simple demo analysis leveraging a `ReadUntilClient` to manage
     queuing and expiry of read data.
 
@@ -77,6 +79,8 @@ def simple_analysis(client, batch_size=10, delay=1, throttle=0.1):
     :param batch_size: number of reads to pull from `client` at a time.
     :param delay: number of seconds to wait before starting analysis.
     :param throttle: minimum interval between requests to `client`.
+    :param unblock_duration: time in seconds to apply unblock voltage.
+
     """
 
     logger = logging.getLogger('Analysis')
@@ -103,7 +107,7 @@ def simple_analysis(client, batch_size=10, delay=1, throttle=0.1):
                read.median_before - read.median > 60:
                 client.stop_receiving_read(channel, read.number)
             # we can also call the following for reads we don't like
-            #client.unblock_read(channel, read.number)
+            #client.unblock_read(channel, read.number, duration=unblock_duration)
 
         # limit the rate at which we make requests            
         t1 = time.time()
@@ -176,7 +180,8 @@ def main():
         one_chunk=args.one_chunk, filter_strands=True)
 
     analysis_worker = functools.partial(
-        simple_analysis, read_until_client, delay=args.analysis_delay)
+        simple_analysis, read_until_client, delay=args.analysis_delay,
+        unblock_duration=args.unblock_duration)
 
     results = run_workflow(
         read_until_client, analysis_worker, args.workers, args.run_time,
