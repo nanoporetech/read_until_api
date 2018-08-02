@@ -41,10 +41,12 @@ MinKNOW/ont-python/bin/):
        the API to identify reads via basecalling and alignment. To run it
        requires the optional dependencies of scrappy and mappy. These can be
        installed via `ont-python/bin/python -m pip install mappy scrappie`.
-       To use the `scrappy` basecaller efficiently it is important to set blas
+       To use the `scrappy` basecaller efficiently it is important to set
        the blas library to be single threaded, this is ordinarily done with:
 
            export OPENBLAS_NUM_THREADS=1
+
+       or similar.
 
 
 Client Overview
