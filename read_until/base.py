@@ -269,7 +269,7 @@ class ReadUntilClient(object):
         if self._process_thread is not None:
             self.logger.info("Reset request received, shutting down...")
             self.running.clear()
-            self._process_thread.join(timeout=timeout)
+            self._process_thread.join() # block, try hard for .cancel() on stream
             if self._process_thread.is_alive():
                 self.logger.warn("Stream handler did not finish correctly.")
             else:
@@ -369,8 +369,11 @@ class ReadUntilClient(object):
         )
 
         # ._process_reads() as implemented below is responsible for
-        #    placing action requests on the queue and logging the responses
+        #    placing action requests on the queue and logging the responses.
         self._process_reads(reads)
+
+        # signal to the server that we are done with the stream.
+        reads.cancel()
 
 
     def _runner(self, first_channel=1, last_channel=512, min_chunk_size=ALLOWED_MIN_CHUNK_SIZE, action_batch=1000, action_throttle=0.001):
