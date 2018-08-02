@@ -337,14 +337,15 @@ class ReadUntilClient(object):
         return self.data_queue.popitems(items=batch_size, last=True)
 
 
-    def unblock_read(self, read_channel, read_number):
+    def unblock_read(self, read_channel, read_number, duration=0.1):
         """Request that a read be unblocked.
 
         :param read_channel: a read's channel number.
         :param read_number: a read's read number (the nth read per channel).
+        :param duration: time in seconds to apply unblock voltage.
 
         """
-        self._put_action(read_channel, read_number, 'unblock')
+        self._put_action(read_channel, read_number, 'unblock', duration=duration)
 
 
     def stop_receiving_read(self, read_channel, read_number):
@@ -511,13 +512,15 @@ class ReadUntilClient(object):
                 last_msg_time = now
 
 
-    def _put_action(self, read_channel, read_number, action):
+    def _put_action(self, read_channel, read_number, action, **params):
         """Stores an action requests on the queue ready to be placed on the
         gRPC stream.
 
         :param read_channel: a read's channel number.
         :param read_number: a read's read number (the nth read per channel).
         :param action: either 'stop_further_data' or 'unblock'.
+        :param params: dictionary of parameters for action. Allowed values
+            are: 'duration' for `action='unblock'`.
 
         """
         action_id = str(uuid.uuid4())
@@ -531,9 +534,11 @@ class ReadUntilClient(object):
             action_kwargs[action] = self.msgs.GetLiveReadsRequest.StopFurtherData()
         elif action == 'unblock':
             action_kwargs[action] = self.msgs.GetLiveReadsRequest.UnblockAction()
+            if 'duration' in params:
+                action_kwargs[action].duration = params['duration']
         else:
             raise ValueError("'action' parameter must must be 'stop_further_data' or 'unblock'.")
-        
+
         action_request = self.msgs.GetLiveReadsRequest.Action(**action_kwargs)
         self.action_queue.put(action_request)
         self.logger.debug('Action {} on channel {}, read {} : {}'.format(
