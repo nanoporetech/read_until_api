@@ -1,6 +1,10 @@
 import argparse
 import concurrent.futures
+import functools
 import logging
+from multiprocessing.pool import ThreadPool
+from multiprocessing import TimeoutError
+import signal
 import sys
 import traceback
 import time
@@ -31,8 +35,14 @@ class ThreadPoolExecutorStackTraced(concurrent.futures.ThreadPoolExecutor):
             raise sys.exc_info()[0](traceback.format_exc())
 
 
+def ignore_sigint():
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+
 def _get_parser():
     parser = argparse.ArgumentParser('Read until API demonstration..')
+    parser.add_argument('--host', default='127.0.0.1',
+        help='MinKNOW server host.')
     parser.add_argument('--port', type=int, default=8000,
         help='MinKNOW server port.')
     parser.add_argument('--workers', default=1, type=int,
@@ -41,10 +51,13 @@ def _get_parser():
         help='Period to wait before starting analysis.')
     parser.add_argument('--run_time', type=int, default=30,
         help='Period to run the analysis.')
+    parser.add_argument('--unblock_duration', type=float, default=0.1,
+        help='Time (in seconds) to apply unblock voltage.')
     parser.add_argument('--one_chunk', default=False, action='store_true',
         help='Minimum read chunk size to receive.')
     parser.add_argument('--min_chunk_size', type=int, default=2000,
-        help='Minimum read chunk size to receive.')
+        help='Minimum read chunk size to receive. NOTE: this functionality '
+             'is currently disabled; read chunks received will be unfiltered.')
     parser.add_argument(
         '--debug', help="Print all debugging information",
         action="store_const", dest="log_level",
@@ -58,7 +71,7 @@ def _get_parser():
     return parser
 
 
-def simple_analysis(client, batch_size=10, delay=1, throttle=0.1):
+def simple_analysis(client, batch_size=10, delay=1, throttle=0.1, unblock_duration=0.1):
     """A simple demo analysis leveraging a `ReadUntilClient` to manage
     queuing and expiry of read data.
 
@@ -66,6 +79,8 @@ def simple_analysis(client, batch_size=10, delay=1, throttle=0.1):
     :param batch_size: number of reads to pull from `client` at a time.
     :param delay: number of seconds to wait before starting analysis.
     :param throttle: minimum interval between requests to `client`.
+    :param unblock_duration: time in seconds to apply unblock voltage.
+
     """
 
     logger = logging.getLogger('Analysis')
@@ -92,14 +107,66 @@ def simple_analysis(client, batch_size=10, delay=1, throttle=0.1):
                read.median_before - read.median > 60:
                 client.stop_receiving_read(channel, read.number)
             # we can also call the following for reads we don't like
-            #client.unblock_read(channel, read.number)
+            #client.unblock_read(channel, read.number, duration=unblock_duration)
 
         # limit the rate at which we make requests            
         t1 = time.time()
         if t0 + throttle > t1:
             time.sleep(throttle + t0 - t1)
- 
-    logger.info('Finished analysis of reads.')
+    else:
+        logger.info('Finished analysis of reads as client stopped.')
+
+
+def run_workflow(client, analysis_worker, n_workers, run_time,
+                 runner_kwargs=dict()):
+    """Run an analysis function against a ReadUntilClient.
+
+    :param client: `ReadUntilClient` instance.
+    :param analysis worker: a function to process reads. It should exit in
+        response to `client.is_running == False`.
+    :param n_workers: number of incarnations of `analysis_worker` to run.
+    :param run_time: time (in seconds) to run workflow.
+    :param runner_kwargs: keyword arguments for `client.run()`. 
+
+    :returns: a list of results, on item per worker.
+
+    """
+    logger = logging.getLogger('Manager')
+
+    results = []
+    pool = ThreadPool(n_workers) # initializer=ignore_sigint)
+    logger.info("Creating {} workers".format(n_workers))
+    try:
+        # start the client
+        client.run(**runner_kwargs)
+        # start a pool of workers
+        for _ in range(n_workers):
+            results.append(pool.apply_async(analysis_worker))
+        pool.close()
+        # wait a bit before closing down
+        time.sleep(run_time)
+        logger.info("Sending reset")
+        client.reset()
+        pool.join()
+    except KeyboardInterrupt:
+        logger.info("Caught ctrl-c, terminating workflow.")
+        client.reset()
+
+    # collect results (if any)
+    collected = []
+    for result in results:
+        try:
+            res = result.get(3)
+        except TimeoutError:
+            logger.warn("Worker function did not exit successfully.")
+            collected.append(None)
+        except Exception as e:
+            logger.warn("Worker raise exception: {}".format(repr(e)))
+        else:
+            logger.info("Worker exited successfully.")
+            collected.append(res)
+    pool.terminate()
+    return collected
 
 
 def main():
@@ -107,24 +174,19 @@ def main():
 
     logging.basicConfig(format='[%(asctime)s - %(name)s] %(message)s',
         datefmt='%H:%M:%S', level=args.log_level)
-    logger = logging.getLogger('Manager')
 
     read_until_client = read_until.ReadUntilClient(
-        mk_port=args.port, one_chunk=args.one_chunk, filter_strands=True)
+        mk_host=args.host, mk_port=args.port,
+        one_chunk=args.one_chunk, filter_strands=True)
 
-    # this somewhat assumes we get at least two threads ;)
-    with ThreadPoolExecutorStackTraced() as executor:
-        futures = list()
-        futures.append(executor.submit(
-            read_until_client.run, runner_kwargs={
-                'run_time':args.run_time, 'min_chunk_size':args.min_chunk_size
-            }
-        ))
-        for _ in range(args.workers):
-            futures.append(executor.submit(
-                simple_analysis, read_until_client, delay=args.analysis_delay
-            ))
+    analysis_worker = functools.partial(
+        simple_analysis, read_until_client, delay=args.analysis_delay,
+        unblock_duration=args.unblock_duration)
 
-        for f in concurrent.futures.as_completed(futures):
-            if f.exception() is not None:
-                logger.warning(f.exception())
+    results = run_workflow(
+        read_until_client, analysis_worker, args.workers, args.run_time,
+        runner_kwargs={
+            'min_chunk_size':args.min_chunk_size
+        }
+    )
+    # simple analysis doesn't return results
