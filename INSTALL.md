@@ -2,7 +2,7 @@ Ubuntu Installation
 -------------------
 
 *The following walkthrough for installing MinKNOW with the Read Until API on
-Ubuntu 16.04 was contributed by [ArtemD](https://github.com/danartei).*
+Ubuntu 16.04 was contributed by [ArtemD](https://github.com/danarte).*
 
 Begin by installing MinKNOW as in the [guide](https://community.nanoporetech.com/protocols/experiment-companion-minknow/v/mke_1013_v1_revaj_11apr2016/installing-minknow-on-linu):
 
