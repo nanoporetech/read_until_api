@@ -44,7 +44,7 @@ def _get_parser():
     parser.add_argument('--host', default='127.0.0.1',
         help='MinKNOW server host.')
     parser.add_argument('--port', type=int, default=8000,
-        help='MinKNOW server port.')
+        help='MinKNOW gRPC server port.')
     parser.add_argument('--workers', default=1, type=int,
         help='worker threads.')
     parser.add_argument('--analysis_delay', type=int, default=1,
@@ -107,7 +107,7 @@ def simple_analysis(client, batch_size=10, delay=1, throttle=0.1, unblock_durati
                read.median_before - read.median > 60:
                 client.stop_receiving_read(channel, read.number)
             # we can also call the following for reads we don't like
-            #client.unblock_read(channel, read.number, duration=unblock_duration)
+            client.unblock_read(channel, read.number, duration=unblock_duration)
 
         # limit the rate at which we make requests            
         t1 = time.time()
