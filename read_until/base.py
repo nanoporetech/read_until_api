@@ -1,10 +1,11 @@
-from collections import defaultdict, Counter, OrderedDict 
+from collections import Counter, defaultdict,  OrderedDict
 from itertools import count as _count
+from threading import Event, Lock, Thread
 import logging
 import sys
-from threading import Lock, Event, Thread
 import time
 import uuid
+
 
 try:
     import queue
@@ -14,7 +15,6 @@ except ImportError:
 import numpy
 
 import minknow
-from read_until.jsonrpc import Client as JSONClient
 
 
 if sys.version_info[0] < 3:
@@ -23,7 +23,31 @@ else:
     NullRaw = bytes('', 'utf8')
 
 
-__all__ = ['ReadCache', 'ReadUntilClient', 'NullRaw'] 
+__all__ = ['ReadCache', 'ReadUntilClient', 'NullRaw']
+
+# This replaces the results of an old call to MinKNOWs
+# jsonRPC interface. That interface does not respond
+# correctly when a run has been configured using the
+# newer gRPC interace. This information is not currently
+# available with the gRPC interface so as a temporary
+# measure we list a standard set of values here.
+CLASS_MAP = {
+    'read_classification_map': {
+        '83': 'strand',
+        '67': 'strand1',
+        '77': 'multiple',
+        '90': 'zero',
+        '65': 'adapter',
+        '66': 'mux_uncertain',
+        '70': 'user2',
+        '68': 'user1',
+        '69': 'event',
+        '80': 'pore',
+        '85': 'unavailable',
+        '84': 'transition',
+        '78': 'unclassed',
+    }
+}
 
 
 class ReadCache(object):
@@ -134,8 +158,8 @@ def _new_thread_name(template="read_until-%d"):
 
 
 # The maximum allowed minimum read chunk size. Filtering of small read chunks
-#    from the gRPC stream is buggy. The value 0 effectively disables the 
-#    filtering functionality.
+# from the gRPC stream is buggy. The value 0 effectively disables the 
+# filtering functionality.
 ALLOWED_MIN_CHUNK_SIZE = 0
 
 
@@ -147,7 +171,7 @@ class ReadUntilClient(object):
         with the MinKNOW gRPC stream and provides a thread-safe queue
         containing the most recent read data on each channel.
 
-        :param mk_port: MinKNOW port.
+        :param mk_port: MinKNOW gRPC port for the sequencing device.
         :param cache_size: maximum number of read chunks to cache from
             gRPC stream. Setting this to the number of device channels
             will allow caching of the most recent data per channel.
@@ -196,7 +220,7 @@ class ReadUntilClient(object):
         self.logger = logging.getLogger('ReadUntil')
 
         self.mk_host = mk_host
-        self.mk_port = mk_port
+        self.mk_grpc_port = mk_port
         self.cache_size = cache_size
         self.CacheType = cache_type
         self.filter_strands = filter_strands
@@ -214,12 +238,8 @@ class ReadUntilClient(object):
         self.logger.info('Creating {} client with {} data queue {}.'.format(
             client_type, self.CacheType.__name__, filter_to))
 
-        # Use MinKNOWs jsonrpc to find gRPC port and some other bits
-        self.mk_json_url = 'http://{}:{}/jsonrpc'.format(self.mk_host, self.mk_port)
-        self.logger.info('Querying MinKNOW at {}.'.format(self.mk_json_url))
-        json_client = JSONClient(self.mk_json_url)
-        self.mk_static_data = json_client.get_static_data()
-        class_map = json_client.get_read_classification_map()
+        self.logger.warn("Using pre-defined read classification map.")
+        class_map = CLASS_MAP
         self.read_classes = {
             int(k):v for k, v in
             class_map['read_classification_map'].items()
@@ -230,7 +250,7 @@ class ReadUntilClient(object):
                 self.strand_classes.add(key)
         self.logger.debug('Strand-like classes are {}.'.format(self.strand_classes))
 
-        self.grpc_port = self.mk_static_data['grpc_port']
+        self.grpc_port = self.mk_grpc_port
         self.logger.info('Creating rpc connection on port {}.'.format(self.grpc_port))
         self.connection = minknow.rpc.Connection(host=self.mk_host, port=self.grpc_port)
         self.logger.info('Got rpc connection.')
