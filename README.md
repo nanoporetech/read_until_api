@@ -3,15 +3,13 @@ Read Until
 
 Adaptive sampling enables a large number of applications, traditionally associated with complex molecular biology methods, to be carried out by the sequencer itself.  Adaptive sampling enables the following: 
 
-Enrichment:  Users can ask the system to enrich for strands that contain a target region of interest, a haplotype of choice or an organism of interest against a complex background 
+**Enrichment**:  Users can ask the system to enrich for strands that contain a target region of interest, a haplotype of choice or an organism of interest against a complex background 
 
-Depletion: Users can reject strands from an organism which is of no interest (e.g. host depletion).  In the case of pathogen detection or microbiome applications in human health this could be enabled as a "human filter" ensuring that this sensitive, confidential data is never committed to disk.
+**Depletion**: Users can reject strands from an organism which is of no interest (e.g. host depletion).  In the case of pathogen detection or microbiome applications in human health this could be enabled as a "human filter" ensuring that this sensitive, confidential data is never committed to disk.
 
-Balancing: Users can use adaptive sampling to balance their barcodes, ensuring they achieve target depths for each barcode and also even out coverage across a genome by rejecting strands representing regions of the genome already at their target depth in favour of regions that have lower coverage.
+**Balancing**: Users can use adaptive sampling to balance their barcodes, ensuring they achieve target depths for each barcode and also even out coverage across a genome by rejecting strands representing regions of the genome already at their target depth in favour of regions that have lower coverage.
 
-The read until API is provided "as is" as a research tool (Issue reporting has been disabled on the github website). Users with questions should go to the Nanopore community and post comments here (link to read until release note)
-
-It requires some advanced programming capability . Efforts are ongoing by the Oxford Nanopore team to release simpler versions of this tool enabling more and more users to deploy it successfully.
+The read until API is provided "as is" as a research tool. Issue reporting has been disabled on the github website; users with questions should go to the Nanopore community and post comments [here](https://community.nanoporetech.com/posts/adaptive-sampling-release). Usage currently requires some advanced programming capability. Efforts are ongoing by the Oxford Nanopore team to release simpler versions of this tool enabling more and more users to deploy it successfully.
 
 Please add new feature requests to the feature request pinboard under the tag "Adaptive Sampling" (link)
 
