@@ -6,6 +6,8 @@
 *.swp
 .#*
 *.egg-info
+.venv/
+.vscode/
 build
 dist
 deb_dist
@@ -13,4 +15,3 @@ tmp/
 *.gz
 *__pycache__*
 *.fna
-

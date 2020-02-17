@@ -1,6 +1,6 @@
 # Copyright (c) 2014 Giuseppe Ciotta <gciotta@gmail.com>
 # All rights reserved.
-# 
+#
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
 # are met:
@@ -11,7 +11,7 @@
 #    documentation and/or other materials provided with the distribution.
 # 3. The name of the author may not be used to endorse or promote products
 #    derived from this software without specific prior written permission.
-# 
+#
 # THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 # IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
 # OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
@@ -69,10 +69,9 @@ class Client(object):
 
     def __init__(self, url, session=None, **requests_kwargs):
         self.session = session or requests.Session()
-        self.session.headers.update({
-            'Content-Type': 'application/json',
-            'Accept': 'application/json-rpc',
-        })
+        self.session.headers.update(
+            {"Content-Type": "application/json", "Accept": "application/json-rpc",}
+        )
         self.request = functools.partial(self.session.post, url, **requests_kwargs)
 
     def send_request(self, method_name, is_notification, params):
@@ -81,11 +80,16 @@ class Client(object):
         try:
             response = self.request(data=request_body)
         except requests.RequestException as requests_exception:
-            raise TransportError('Error calling method %r' % method_name, cause=requests_exception)
+            raise TransportError(
+                "Error calling method %r" % method_name, cause=requests_exception
+            )
 
         if response.status_code != requests.codes.ok:
-            raise TransportError('Got non-200 response from server, status code: %s' % response.status_code,
-                                 server_response=response)
+            raise TransportError(
+                "Got non-200 response from server, status code: %s"
+                % response.status_code,
+                server_response=response,
+            )
 
         if not is_notification:
             return self.parse_response(response)
@@ -96,23 +100,38 @@ class Client(object):
         try:
             server_data = response.json()
         except ValueError as value_error:
-            raise ProtocolError('Cannot deserialize response body: %s' % value_error, server_response=response)
+            raise ProtocolError(
+                "Cannot deserialize response body: %s" % value_error,
+                server_response=response,
+            )
 
         if not isinstance(server_data, dict):
-            raise ProtocolError('Response is not a dictionary', server_response=response, server_data=server_data)
+            raise ProtocolError(
+                "Response is not a dictionary",
+                server_response=response,
+                server_data=server_data,
+            )
 
         # jsonrpc spec says error should only be present if there were an error
         #     but MinKNOW returns '0' when no error is present. It also does not
         #     return a structure with 'code' and 'message', just a bare message.
-        error = server_data.get('error')
-        if error and error != '0':
+        error = server_data.get("error")
+        if error and error != "0":
             code = -32000
             message = error
-            raise ProtocolError('Error: %s %s' % (code, message), server_response=response, server_data=server_data)
-        elif 'result' not in server_data:
-            raise ProtocolError('Response without a result field', server_response=response, server_data=server_data)
+            raise ProtocolError(
+                "Error: %s %s" % (code, message),
+                server_response=response,
+                server_data=server_data,
+            )
+        elif "result" not in server_data:
+            raise ProtocolError(
+                "Response without a result field",
+                server_response=response,
+                server_data=server_data,
+            )
         else:
-            return server_data['result']
+            return server_data["result"]
 
     @staticmethod
     def dumps(data):
@@ -121,12 +140,12 @@ class Client(object):
 
     def serialize(self, method_name, params, is_notification):
         """Generate the raw JSON message to be sent to the server"""
-        data = {'jsonrpc': '2.0', 'method': method_name}
+        data = {"jsonrpc": "2.0", "method": method_name}
         if params:
-            data['params'] = params
+            data["params"] = params
         if not is_notification:
             # some JSON-RPC servers complain when receiving str(uuid.uuid4()). Let's pick something simpler.
-            data['id'] = random.randint(1, sys.maxsize)
+            data["id"] = random.randint(1, sys.maxsize)
         return self.dumps(data)
 
     def __getattr__(self, method_name):
@@ -134,9 +153,11 @@ class Client(object):
 
     def __request(self, method_name, args=None, kwargs=None):
         """Perform the actual RPC call. If _notification=True, send a notification and don't wait for a response"""
-        is_notification = kwargs.pop('_notification', False)
+        is_notification = kwargs.pop("_notification", False)
         if args and kwargs:
-            raise ProtocolError('JSON-RPC spec forbids mixing arguments and keyword arguments')
+            raise ProtocolError(
+                "JSON-RPC spec forbids mixing arguments and keyword arguments"
+            )
 
         # from the specs:
         # "If resent, parameters for the rpc call MUST be provided as a Structured value.
@@ -157,7 +178,9 @@ class Method(object):
     def __getattr__(self, method_name):
         if method_name.startswith("_"):  # prevent rpc-calls for private methods
             raise AttributeError("invalid attribute '%s'" % method_name)
-        return Method(self.__request_method, "%s.%s" % (self.__method_name, method_name))
+        return Method(
+            self.__request_method, "%s.%s" % (self.__method_name, method_name)
+        )
 
     def __call__(self, *args, **kwargs):
         return self.__request_method(self.__method_name, args, kwargs)

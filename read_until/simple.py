@@ -13,16 +13,16 @@ import numpy
 
 import read_until
 
+
 class ThreadPoolExecutorStackTraced(concurrent.futures.ThreadPoolExecutor):
     """ThreadPoolExecutor records only the text of an exception,
     this class will give back a bit more."""
 
-
     def submit(self, fn, *args, **kwargs):
         """Submits the wrapped function instead of `fn`"""
         return super(ThreadPoolExecutorStackTraced, self).submit(
-            self._function_wrapper, fn, *args, **kwargs)
-
+            self._function_wrapper, fn, *args, **kwargs
+        )
 
     def _function_wrapper(self, fn, *args, **kwargs):
         """Wraps `fn` in order to preserve the traceback of any kind of
@@ -40,32 +40,53 @@ def ignore_sigint():
 
 
 def _get_parser():
-    parser = argparse.ArgumentParser('Read until API demonstration..')
-    parser.add_argument('--host', default='127.0.0.1',
-        help='MinKNOW server host.')
-    parser.add_argument('--port', type=int, default=8000,
-        help='MinKNOW gRPC server port.')
-    parser.add_argument('--workers', default=1, type=int,
-        help='worker threads.')
-    parser.add_argument('--analysis_delay', type=int, default=1,
-        help='Period to wait before starting analysis.')
-    parser.add_argument('--run_time', type=int, default=30,
-        help='Period to run the analysis.')
-    parser.add_argument('--unblock_duration', type=float, default=0.1,
-        help='Time (in seconds) to apply unblock voltage.')
-    parser.add_argument('--one_chunk', default=False, action='store_true',
-        help='Minimum read chunk size to receive.')
-    parser.add_argument('--min_chunk_size', type=int, default=2000,
-        help='Minimum read chunk size to receive. NOTE: this functionality '
-             'is currently disabled; read chunks received will be unfiltered.')
+    parser = argparse.ArgumentParser("Read until API demonstration..")
+    parser.add_argument("--host", default="127.0.0.1", help="MinKNOW server host.")
     parser.add_argument(
-        '--debug', help="Print all debugging information",
-        action="store_const", dest="log_level",
-        const=logging.DEBUG, default=logging.WARNING,
+        "--port", type=int, default=8000, help="MinKNOW gRPC server port."
+    )
+    parser.add_argument("--workers", default=1, type=int, help="worker threads.")
+    parser.add_argument(
+        "--analysis_delay",
+        type=int,
+        default=1,
+        help="Period to wait before starting analysis.",
     )
     parser.add_argument(
-        '--verbose', help="Print verbose messaging.",
-        action="store_const", dest="log_level",
+        "--run_time", type=int, default=30, help="Period to run the analysis."
+    )
+    parser.add_argument(
+        "--unblock_duration",
+        type=float,
+        default=0.1,
+        help="Time (in seconds) to apply unblock voltage.",
+    )
+    parser.add_argument(
+        "--one_chunk",
+        default=False,
+        action="store_true",
+        help="Minimum read chunk size to receive.",
+    )
+    parser.add_argument(
+        "--min_chunk_size",
+        type=int,
+        default=2000,
+        help="Minimum read chunk size to receive. NOTE: this functionality "
+        "is currently disabled; read chunks received will be unfiltered.",
+    )
+    parser.add_argument(
+        "--debug",
+        help="Print all debugging information",
+        action="store_const",
+        dest="log_level",
+        const=logging.DEBUG,
+        default=logging.WARNING,
+    )
+    parser.add_argument(
+        "--verbose",
+        help="Print verbose messaging.",
+        action="store_const",
+        dest="log_level",
         const=logging.INFO,
     )
     return parser
@@ -83,14 +104,14 @@ def simple_analysis(client, batch_size=10, delay=1, throttle=0.1, unblock_durati
 
     """
 
-    logger = logging.getLogger('Analysis')
+    logger = logging.getLogger("Analysis")
     logger.warn(
-        'Initialising simple analysis. '
-        'This will likely not achieve anything useful. '
-        'Enable --verbose or --debug logging to see more.'
+        "Initialising simple analysis. "
+        "This will likely not achieve anything useful. "
+        "Enable --verbose or --debug logging to see more."
     )
     # we sleep a little simply to ensure the client has started initialised
-    logger.info('Starting analysis of reads in {}s.'.format(delay))
+    logger.info("Starting analysis of reads in {}s.".format(delay))
     time.sleep(delay)
 
     while client.is_running:
@@ -103,22 +124,23 @@ def simple_analysis(client, batch_size=10, delay=1, throttle=0.1, unblock_durati
             read.raw_data = read_until.NullRaw
 
             # make a decision that the read is good at we don't need more data?
-            if read.median_before > read.median and \
-               read.median_before - read.median > 60:
+            if (
+                read.median_before > read.median
+                and read.median_before - read.median > 60
+            ):
                 client.stop_receiving_read(channel, read.number)
             # we can also call the following for reads we don't like
             client.unblock_read(channel, read.number, duration=unblock_duration)
 
-        # limit the rate at which we make requests            
+        # limit the rate at which we make requests
         t1 = time.time()
         if t0 + throttle > t1:
             time.sleep(throttle + t0 - t1)
     else:
-        logger.info('Finished analysis of reads as client stopped.')
+        logger.info("Finished analysis of reads as client stopped.")
 
 
-def run_workflow(client, analysis_worker, n_workers, run_time,
-                 runner_kwargs=dict()):
+def run_workflow(client, analysis_worker, n_workers, run_time, runner_kwargs=dict()):
     """Run an analysis function against a ReadUntilClient.
 
     :param client: `ReadUntilClient` instance.
@@ -131,10 +153,10 @@ def run_workflow(client, analysis_worker, n_workers, run_time,
     :returns: a list of results, on item per worker.
 
     """
-    logger = logging.getLogger('Manager')
+    logger = logging.getLogger("Manager")
 
     results = []
-    pool = ThreadPool(n_workers) # initializer=ignore_sigint)
+    pool = ThreadPool(n_workers)  # initializer=ignore_sigint)
     logger.info("Creating {} workers".format(n_workers))
     try:
         # start the client
@@ -170,23 +192,33 @@ def run_workflow(client, analysis_worker, n_workers, run_time,
 
 
 def main():
-    args = _get_parser().parse_args() 
+    args = _get_parser().parse_args()
 
-    logging.basicConfig(format='[%(asctime)s - %(name)s] %(message)s',
-        datefmt='%H:%M:%S', level=args.log_level)
+    logging.basicConfig(
+        format="[%(asctime)s - %(name)s] %(message)s",
+        datefmt="%H:%M:%S",
+        level=args.log_level,
+    )
 
     read_until_client = read_until.ReadUntilClient(
-        mk_host=args.host, mk_port=args.port,
-        one_chunk=args.one_chunk, filter_strands=True)
+        mk_host=args.host,
+        mk_port=args.port,
+        one_chunk=args.one_chunk,
+        filter_strands=True,
+    )
 
     analysis_worker = functools.partial(
-        simple_analysis, read_until_client, delay=args.analysis_delay,
-        unblock_duration=args.unblock_duration)
+        simple_analysis,
+        read_until_client,
+        delay=args.analysis_delay,
+        unblock_duration=args.unblock_duration,
+    )
 
     results = run_workflow(
-        read_until_client, analysis_worker, args.workers, args.run_time,
-        runner_kwargs={
-            'min_chunk_size':args.min_chunk_size
-        }
+        read_until_client,
+        analysis_worker,
+        args.workers,
+        args.run_time,
+        runner_kwargs={"min_chunk_size": args.min_chunk_size},
     )
     # simple analysis doesn't return results

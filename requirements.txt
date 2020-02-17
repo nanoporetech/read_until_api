@@ -1,3 +1,13 @@
+
 grpcio
+grpcio-tools
+numpy
+protobuf
+protobuf_setuptools
 requests
 
+# Testing tools
+black
+pylint
+pytest
+pytest-cov

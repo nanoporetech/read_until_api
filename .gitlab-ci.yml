@@ -1,0 +1,34 @@
+variables:
+  PYTHON_DOCKER_IMAGE: python:3.7-stretch
+  GIT_SUBMODULE_STRATEGY: recursive
+
+check.black:
+  image: ${PYTHON_DOCKER_IMAGE}
+  script:
+    - pip install -r requirements.txt
+    - black --check --diff read_until/*
+
+check.pylint:
+  image: ${PYTHON_DOCKER_IMAGE}
+  script:
+    - pip install -r requirements.txt
+    - python setup.py install
+    - ignore_path="read_until/generates/minknow/rpc/*.py"
+    - pylint --ignore-patterns="${ignore_path}" read_until || true
+    - echo "pylint_score $(pylint --ignore-patterns="${ignore_path}" ./read_until | tail -2 | grep -o -E '[0-9.]+' | head -1)" >metrics.txt
+    - cat metrics.txt
+  artifacts:
+    reports:
+      metrics: metrics.txt
+    
+check.test:
+  image: ${PYTHON_DOCKER_IMAGE}
+  script:
+    - pip install -r requirements.txt
+    - python setup.py develop
+    - pytest --cov=read_until --cov-report html:cov_html --cov-report term --junitxml=./junit.xml 
+  artifacts:
+    reports:
+      junit: ./junit.xml
+    paths:
+      - cov_html/

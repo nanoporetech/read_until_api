@@ -1,0 +1,6 @@
+[FORMAT]
+
+max-line-length=88
+
+[MESSAGES CONTROL]
+disable=no-member, bad-continuation, line-too-long
