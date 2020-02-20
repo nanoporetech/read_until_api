@@ -50,6 +50,7 @@ with open(os.path.join(dir_path, "requirements.txt")) as fh:
 extra_requires = {"identification": ["scrappy", "mappy"]}
 extensions = []
 
+
 def generate_protos(source_dir, base_out_dir):
     # Late import to ensure dependencies are installed when this runs.
     from grpc.tools import protoc
@@ -66,9 +67,7 @@ def generate_protos(source_dir, base_out_dir):
         % (files_to_generate, output_dir, os.listdir(files_to_generate))
     )
 
-    files = [
-        os.path.join(files_to_generate, f) for f in os.listdir(files_to_generate)
-    ]
+    files = [os.path.join(files_to_generate, f) for f in os.listdir(files_to_generate)]
 
     proto_include = pkg_resources.resource_filename("grpc_tools", "_proto")
     command = [
@@ -81,6 +80,7 @@ def generate_protos(source_dir, base_out_dir):
     ]
     if protoc.main(command) != 0:
         raise Exception("protoc error: {} failed".format(command))
+
 
 class ProtoBuildCommand(Command):
     user_options = []
@@ -95,11 +95,13 @@ class ProtoBuildCommand(Command):
         base_dir = os.path.abspath(os.path.dirname(__file__))
         generate_protos(base_dir, base_dir)
 
+
 class DevelopCommand(develop):
     def run(self):
         develop.run(self)
         base_dir = os.path.abspath(os.path.dirname(__file__))
         generate_protos(base_dir, base_dir)
+
 
 class InstallCommand(install):
     def run(self):
@@ -126,8 +128,8 @@ setup(
     zip_safe=False,
     entry_points={
         "console_scripts": [
-            "read_until_simple = {}.simple:main".format(__pkg_name__),
-            "read_until_ident = {}.identification:main".format(__pkg_name__),
+            "read_until_simple = {}.examples.simple:main".format(__pkg_name__),
+            "read_until_ident = {}.examples.identification:main".format(__pkg_name__),
         ],
     },
     cmdclass={

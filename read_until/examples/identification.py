@@ -79,7 +79,7 @@ def divide_analysis(
             else:
                 # convert the read data into a numpy array of correct type
                 raw_data = numpy.fromstring(read.raw_data, client.signal_dtype)
-                read.raw_data = read_until.NullRaw
+                read.raw_data = bytes("", "utf8")
                 basecall, score = basecall_data(raw_data)
                 aligns = list(mapper.map(basecall))
                 if len(aligns) == 0:

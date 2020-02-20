@@ -121,7 +121,7 @@ def simple_analysis(client, batch_size=10, delay=1, throttle=0.1, unblock_durati
         for channel, read in read_batch:
             # convert the read data into a numpy array of correct type
             raw_data = numpy.fromstring(read.raw_data, client.signal_dtype)
-            read.raw_data = read_until.NullRaw
+            read.raw_data = bytes("", "utf8")
 
             # make a decision that the read is good at we don't need more data?
             if (

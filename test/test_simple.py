@@ -1,12 +1,31 @@
 """Test simple read until functionality"""
 
 import numpy
+import pytest
 
 import read_until
 from read_until.minknow_grpc_api import data_pb2
 
 from read_until_test_server import ReadUntilTestServer
 from test_utils import wait_until
+
+
+def test_bad_setup():
+    """Test setup fails correctly with bad input"""
+    test_server = ReadUntilTestServer()
+
+    # Bad port
+    with pytest.raises(Exception):
+        read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port + 1)
+
+    # Bad prefilter_classes input
+    with pytest.raises(ValueError):
+        read_until.ReadUntilClient(
+            mk_host="localhost",
+            mk_port=test_server.port,
+            filter_strands=True,
+            prefilter_classes=4,
+        )
 
 
 def test_setup():
