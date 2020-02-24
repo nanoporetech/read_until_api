@@ -37,5 +37,4 @@ __all__ = [
 ]
 
 if remove_extra_import:
-    assert sys.path[-1] == import_path
-    del sys.path[-1]
+    del sys.path[sys.path.index(import_path)]
