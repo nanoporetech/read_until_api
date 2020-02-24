@@ -1,6 +1,7 @@
 """Test grpc server for read until"""
 
 import argparse
+from collections import namedtuple
 from concurrent import futures
 from contextlib import closing
 import logging
@@ -9,6 +10,7 @@ import socket
 import sys
 from threading import Thread
 import time
+import typing
 
 import grpc
 from read_until.minknow_grpc_api import (
@@ -28,10 +30,14 @@ class DataService(data_pb2_grpc.DataServiceServicer):
     Contains useful methods for testing responses to get_live_reads
     """
 
+    ChannelDataItem = namedtuple("ChannelDataItem", ["time", "data"])
+
     def __init__(self):
         self.live_reads_responses_to_send = Queue()
         self._live_reads_terminate = Queue()
         self.live_reads_requests = []
+
+        self.channel_data = {}
 
     def add_response(self, response: data_pb2.GetLiveReadsResponse):
         """
@@ -67,6 +73,9 @@ class DataService(data_pb2_grpc.DataServiceServicer):
             for request in request_iterator:
                 LOGGER.info("Server received request: %s", request)
                 self.live_reads_requests.append(request)
+                if request.HasField("actions"):
+                    for action in request.actions.actions:
+                        self._add_channel_data(action.channel, action)
 
         request_thread = Thread(target=request_handler, args=(self, request_iterator,))
         request_thread.start()
@@ -75,6 +84,7 @@ class DataService(data_pb2_grpc.DataServiceServicer):
             # If we have been asked to exit then abort
             try:
                 self._live_reads_terminate.get(block=False)
+                LOGGER.info("Exiting get_live_reads due to terminate request")
                 return
             except Empty:
                 pass
@@ -82,9 +92,46 @@ class DataService(data_pb2_grpc.DataServiceServicer):
             try:
                 # Send responses as the queue is filled.
                 resp = self.live_reads_responses_to_send.get(timeout=0.1)
+                for channel, reads in resp.channels.items():
+                    self._add_channel_data(channel, reads)
                 yield resp
             except Empty:
                 continue
+
+    def find_response_times(self) -> typing.List[float]:
+        """Find response times (in seconds) based on sent/received data from the server"""
+        response_times = []
+        for _channel, data in self.channel_data.items():
+            start_item = None
+            for data_item in data:
+                if start_item:
+                    if isinstance(
+                        start_item.data, data_pb2.GetLiveReadsResponse.ReadData
+                    ):
+                        matched = False
+                        read_id = start_item.data.id
+                        read_number = start_item.data.number
+                        matched = (
+                            read_id == data_item.data.id
+                            or read_number == data_item.data.number
+                        )
+
+                        # its possible a new read comes in before the first one is responded to
+                        # so we dont get match
+                        if matched:
+                            response_time = data_item.time - start_item.time
+                            assert response_time >= 0
+                    response_times.append(response_time)
+                    start_item = None
+                else:
+                    start_item = data_item
+
+        return response_times
+
+    def _add_channel_data(self, channel, data):
+        if channel not in self.channel_data:
+            self.channel_data[channel] = []
+        self.channel_data[channel].append(self.ChannelDataItem(time.time(), data))
 
 
 class AcquisitionService(acquisition_pb2_grpc.AcquisitionServiceServicer):
@@ -179,26 +226,7 @@ def main():
     server = ReadUntilTestServer(args.port)
 
     # Add a response for a user to receive
-    # server.data_service.add_response(data_pb2.GetLiveReadsResponse())
-    import numpy
-
-    server.data_service.add_response(
-        data_pb2.GetLiveReadsResponse(
-            channels={
-                4: data_pb2.GetLiveReadsResponse.ReadData(
-                    id="test-read",
-                    number=1,
-                    start_sample=0,
-                    chunk_start_sample=0,
-                    chunk_length=100,
-                    chunk_classifications=[83],
-                    raw_data=numpy.zeros(100, dtype="f4").tobytes(),
-                    median_before=100,
-                    median=150,
-                )
-            }
-        )
-    )
+    server.data_service.add_response(data_pb2.GetLiveReadsResponse())
 
     try:
         while True:

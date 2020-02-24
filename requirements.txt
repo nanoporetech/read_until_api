@@ -3,7 +3,6 @@ grpcio
 grpcio-tools
 numpy
 protobuf
-protobuf_setuptools
 requests
 
 # Testing tools

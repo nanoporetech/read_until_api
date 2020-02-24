@@ -11,10 +11,12 @@ import uuid
 import numpy
 import grpc
 from .minknow_grpc_api import (
-    data_pb2,
-    data_pb2_grpc,
     acquisition_pb2,
     acquisition_pb2_grpc,
+    analysis_configuration_pb2,
+    analysis_configuration_pb2_grpc,
+    data_pb2,
+    data_pb2_grpc,
 )
 
 __all__ = ["ReadCache", "ReadUntilClient"]
@@ -89,8 +91,8 @@ class ReadCache(object):
             counted = False
             while len(self.dict) >= self.size:
                 counted = True
-                k, v = self.dict.popitem(last=False)
-                if k == key and v.number == value.number:
+                k, popped_value = self.dict.popitem(last=False)
+                if k == key and popped_value.number == value.number:
                     self.replaced += 1
                 else:
                     self.missed += 1
@@ -154,6 +156,7 @@ def _format_iter(data):
 
 
 # Helper to generate new thread names
+# pylint: disable=invalid-name
 _counter = _count()
 next(_counter)
 
@@ -247,6 +250,30 @@ class ReadUntilClient(object):
         self.one_chunk = one_chunk
         self.prefilter_classes = prefilter_classes
 
+        try:
+            self.grpc_port = self.mk_grpc_port
+            self.logger.info("Creating rpc connection on port %s.", self.grpc_port)
+            self.channel = grpc.insecure_channel(
+                "%s:%s" % (self.mk_host, self.grpc_port)
+            )
+            grpc.channel_ready_future(self.channel).result(timeout=10)
+        except:
+            logging.error(
+                "Failed to connect to read until at %s: %s",
+                self.mk_host,
+                self.grpc_port,
+            )
+            raise
+
+        self.logger.info("Got rpc connection.")
+        self.acquisition_service = acquisition_pb2_grpc.AcquisitionServiceStub(
+            self.channel
+        )
+        self.data_service = data_pb2_grpc.DataServiceStub(self.channel)
+        self.analysis_configuration_service = analysis_configuration_pb2_grpc.AnalysisConfigurationServiceStub(
+            self.channel
+        )
+
         client_type = "single chunk" if self.one_chunk else "many chunk"
         filter_to = "without prefilter"
         if self.filter_strands:
@@ -273,27 +300,6 @@ class ReadUntilClient(object):
             if value in self.prefilter_classes:
                 self.strand_classes.add(key)
         self.logger.debug("Strand-like classes are %s.", self.strand_classes)
-
-        try:
-            self.grpc_port = self.mk_grpc_port
-            self.logger.info("Creating rpc connection on port %s.", self.grpc_port)
-            self.channel = grpc.insecure_channel(
-                "%s:%s" % (self.mk_host, self.grpc_port)
-            )
-            grpc.channel_ready_future(self.channel).result(timeout=10)
-        except:
-            logging.error(
-                "Failed to connect to read until at %s: %s",
-                self.mk_host,
-                self.grpc_port,
-            )
-            raise
-
-        self.logger.info("Got rpc connection.")
-        self.acquisition_service = acquisition_pb2_grpc.AcquisitionServiceStub(
-            self.channel
-        )
-        self.data_service = data_pb2_grpc.DataServiceStub(self.channel)
 
         self.signal_dtype = _numpy_type(
             self.data_service.get_data_types(

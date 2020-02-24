@@ -1,27 +1,52 @@
 variables:
-  PYTHON_DOCKER_IMAGE: python:3.7-stretch
+  PYTHON_DOCKER_IMAGE: python:3.7-buster
   GIT_SUBMODULE_STRATEGY: recursive
+  UPLOAD_CERT: /etc/ssl/certs/ca-certificates.crt
+
+stages:
+  - check
+  - package
+  - package_test
+  - deploy
+
+check.version:
+  stage: check
+  image: ${PYTHON_DOCKER_IMAGE}
+  script:
+    - pip install -r requirements.txt
+    - python setup.py install
+    - ru_version="$( $ python -c \"import read_until; print(read_until.__version__)\" 2>&1)"
+    - tag_version="${CI_BUILD_REF_NAME/#v/}"
+    - if [[ "${ru_version}" != "${tag_version}" ]]; then
+        echo "Tag is for release ${tag_version}, but read_until version is $ru_version";
+        exit 1;
+      fi
+  only:
+    tags
 
 check.black:
+  stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
     - pip install -r requirements.txt
     - black --check --diff read_until/*
 
 check.pylint:
+  stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
     - pip install -r requirements.txt
     - python setup.py install
-    - ignore_path="read_until/generates/minknow/rpc/*.py"
-    - pylint --ignore-patterns="${ignore_path}" read_until || true
-    - echo "pylint_score $(pylint --ignore-patterns="${ignore_path}" ./read_until | tail -2 | grep -o -E '[0-9.]+' | head -1)" >metrics.txt
+    - ignore_pattern=".*pb2.*"
+    - pylint --ignore-patterns="${ignore_pattern}" read_until || true
+    - echo "pylint_score $(pylint --ignore-patterns="${ignore_pattern}" ./read_until | tail -2 | grep -o -E '[0-9.]+' | head -1)" >metrics.txt
     - cat metrics.txt
   artifacts:
     reports:
       metrics: metrics.txt
     
-check.test:
+.test_skeleton: &test_skeleton
+  stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
     - pip install -r requirements.txt
@@ -32,3 +57,45 @@ check.test:
       junit: ./junit.xml
     paths:
       - cov_html/
+
+check.test.python38:
+    <<: *test_skeleton
+  image: python:3.8-buster
+
+check.test.python37:
+    <<: *test_skeleton
+  image: python:3.7-buster
+
+check.test.python36:
+    <<: *test_skeleton
+  image: python:3.6-buster
+
+check.test.python35:
+    <<: *test_skeleton
+  image: python:3.5-buster
+
+build_wheel:
+  stage: package
+  image: ${PYTHON_DOCKER_IMAGE}
+  script:
+    - python setup.py bdist_wheel
+  artifacts:
+    paths:
+      - dist/
+
+install_wheel:
+  stage: package_test
+  image: ${PYTHON_DOCKER_IMAGE}
+  dependencies: ["build_wheel"]
+  script:
+    - pip install dist/*
+
+wheel upload:
+  stage: deploy
+  image: ${UPLOAD_PYTHON_IMAGE}
+  dependencies: ["build_wheel"]
+  script:
+      - ls dist/
+      - pip install twine
+      - twine upload --cert ${UPLOAD_CERT} ./dist/*.*
+  only: ["master"]
