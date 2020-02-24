@@ -21,8 +21,7 @@ check.version:
         echo "Tag is for release ${tag_version}, but read_until version is $ru_version";
         exit 1;
       fi
-  only:
-    tags
+  only: ["tags"]
 
 check.black:
   stage: check
@@ -59,19 +58,19 @@ check.pylint:
       - cov_html/
 
 check.test.python38:
-    <<: *test_skeleton
+  <<: *test_skeleton
   image: python:3.8-buster
 
 check.test.python37:
-    <<: *test_skeleton
+  <<: *test_skeleton
   image: python:3.7-buster
 
 check.test.python36:
-    <<: *test_skeleton
+  <<: *test_skeleton
   image: python:3.6-buster
 
 check.test.python35:
-    <<: *test_skeleton
+  <<: *test_skeleton
   image: python:3.5-buster
 
 build_wheel:
@@ -98,4 +97,4 @@ wheel upload:
       - ls dist/
       - pip install twine
       - twine upload --cert ${UPLOAD_CERT} ./dist/*.*
-  only: ["master"]
+  only: ["tags"]
