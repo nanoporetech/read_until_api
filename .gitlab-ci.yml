@@ -73,6 +73,7 @@ build_wheel:
   stage: package
   image: ${PYTHON_DOCKER_IMAGE}
   script:
+    - pip install -r requirements.txt
     - python setup.py bdist_wheel
   artifacts:
     paths:
