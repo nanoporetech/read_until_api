@@ -15,7 +15,7 @@ check.version:
   script:
     - pip install -r requirements.txt
     - python setup.py install
-    - ru_version="$( $ python -c \"import read_until; print(read_until.__version__)\" 2>&1)"
+    - ru_version=$( python -c "import read_until; print(read_until.__version__)" 2>&1 )
     - tag_version="${CI_BUILD_REF_NAME/#v/}"
     - if [[ "${ru_version}" != "${tag_version}" ]]; then
         echo "Tag is for release ${tag_version}, but read_until version is $ru_version";
