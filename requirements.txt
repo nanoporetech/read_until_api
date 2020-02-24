@@ -6,7 +6,6 @@ protobuf
 requests
 
 # Testing tools
-black
 pylint
 pytest
 pytest-cov

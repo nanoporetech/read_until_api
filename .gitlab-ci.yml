@@ -28,7 +28,7 @@ check.black:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install -r requirements.txt
+    - pip install black
     - black --check --diff read_until/*
 
 check.pylint:
@@ -69,6 +69,10 @@ check.test.python37:
 check.test.python36:
   <<: *test_skeleton
   image: python:3.6-buster
+
+check.test.python35:
+  <<: *test_skeleton
+  image: python:3.5-buster
 
 build_wheel:
   stage: package
