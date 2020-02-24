@@ -35,8 +35,9 @@ interpreter in the MinKNOW root directory. For example on Ubuntu:
 `/Applications/MinKNOW.app/Contents/Resources/ont-python/bin/python` on OSX
 and `C:\Program Files\OxfordNanopore\MinKNOW\ont-python\python.exe` on Windows).
 
-Installation of the package into other python environments is currently
-unsupported. An example installation process for Ubuntu including installing
+Installation of the package into other python environments is supported. The project
+contains everything it needs to communicate with MinKNOW over a network.
+An example installation process for Ubuntu including installing
 additional python modules can be found in [Ubuntu Install](./INSTALL.md).
 
 Two demonstration programs are provided (and are installed into
