@@ -35,6 +35,7 @@ check.pylint:
   image: ${PYTHON_DOCKER_IMAGE}
   script:
     - pip install -r requirements.txt
+    - pip install -r dev-requirements.txt
     - python setup.py install
     - ignore_pattern=".*pb2.*"
     - pylint --ignore-patterns="${ignore_pattern}" read_until || true
@@ -49,6 +50,7 @@ check.pylint:
   image: ${PYTHON_DOCKER_IMAGE}
   script:
     - pip install -r requirements.txt
+    - pip install -r dev-requirements.txt
     - python setup.py develop
     - pytest --cov=read_until --cov-report html:cov_html --cov-report term --junitxml=./junit.xml 
   artifacts:

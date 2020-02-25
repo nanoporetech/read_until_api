@@ -4,8 +4,3 @@ grpcio-tools
 numpy
 protobuf
 requests
-
-# Testing tools
-pylint
-pytest
-pytest-cov
