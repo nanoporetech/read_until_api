@@ -1,13 +1,14 @@
+"""Simple example to read data from read until and send responses to server"""
+
 import argparse
 import concurrent.futures
 import functools
 import logging
 from multiprocessing.pool import ThreadPool
-from multiprocessing import TimeoutError
-import signal
 import sys
 import traceback
 import time
+import typing
 
 import numpy
 
@@ -24,22 +25,19 @@ class ThreadPoolExecutorStackTraced(concurrent.futures.ThreadPoolExecutor):
             self._function_wrapper, fn, *args, **kwargs
         )
 
-    def _function_wrapper(self, fn, *args, **kwargs):
-        """Wraps `fn` in order to preserve the traceback of any kind of
+    def _function_wrapper(self, func, *args, **kwargs):
+        """Wraps `func` in order to preserve the traceback of any kind of
         raised exception
 
         """
         try:
-            return fn(*args, **kwargs)
+            return func(*args, **kwargs)
         except Exception:
             raise sys.exc_info()[0](traceback.format_exc())
 
 
-def ignore_sigint():
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-
-def _get_parser():
+def get_parser() -> argparse.ArgumentParser:
+    """Build argument parser for example"""
     parser = argparse.ArgumentParser("Read until API demonstration..")
     parser.add_argument("--host", default="127.0.0.1", help="MinKNOW server host.")
     parser.add_argument(
@@ -92,7 +90,13 @@ def _get_parser():
     return parser
 
 
-def simple_analysis(client, batch_size=10, delay=1, throttle=0.1, unblock_duration=0.1):
+def simple_analysis(
+    client: read_until.ReadUntilClient,
+    batch_size: int = 10,
+    delay: float = 1,
+    throttle: float = 0.1,
+    unblock_duration: float = 0.1,
+):
     """A simple demo analysis leveraging a `ReadUntilClient` to manage
     queuing and expiry of read data.
 
@@ -105,23 +109,28 @@ def simple_analysis(client, batch_size=10, delay=1, throttle=0.1, unblock_durati
     """
 
     logger = logging.getLogger("Analysis")
-    logger.warn(
+    logger.warning(
         "Initialising simple analysis. "
         "This will likely not achieve anything useful. "
         "Enable --verbose or --debug logging to see more."
     )
     # we sleep a little simply to ensure the client has started initialised
-    logger.info("Starting analysis of reads in {}s.".format(delay))
+    logger.info("Starting analysis of reads in %ss.", delay)
     time.sleep(delay)
 
+    sample_count = 0
+
     while client.is_running:
-        t0 = time.time()
+        time_begin = time.time()
         # get the most recent read chunks from the client
         read_batch = client.get_read_chunks(batch_size=batch_size, last=True)
         for channel, read in read_batch:
+
             # convert the read data into a numpy array of correct type
-            raw_data = numpy.fromstring(read.raw_data, client.signal_dtype)
-            read.raw_data = read_until.NullRaw
+            raw_data = numpy.frombuffer(read.raw_data, client.signal_dtype)
+            read.raw_data = bytes("", "utf8")
+
+            sample_count += len(raw_data)
 
             # make a decision that the read is good at we don't need more data?
             if (
@@ -133,14 +142,20 @@ def simple_analysis(client, batch_size=10, delay=1, throttle=0.1, unblock_durati
             client.unblock_read(channel, read.number, duration=unblock_duration)
 
         # limit the rate at which we make requests
-        t1 = time.time()
-        if t0 + throttle > t1:
-            time.sleep(throttle + t0 - t1)
-    else:
-        logger.info("Finished analysis of reads as client stopped.")
+        time_end = time.time()
+        if time_begin + throttle > time_end:
+            time.sleep(throttle + time_begin - time_end)
+
+    return sample_count
 
 
-def run_workflow(client, analysis_worker, n_workers, run_time, runner_kwargs=dict()):
+def run_workflow(
+    client: read_until.ReadUntilClient,
+    analysis_worker: typing.Callable[[], None],
+    n_workers: int,
+    run_time: float,
+    runner_kwargs: typing.Optional[typing.Dict] = None,
+):
     """Run an analysis function against a ReadUntilClient.
 
     :param client: `ReadUntilClient` instance.
@@ -148,23 +163,28 @@ def run_workflow(client, analysis_worker, n_workers, run_time, runner_kwargs=dic
         response to `client.is_running == False`.
     :param n_workers: number of incarnations of `analysis_worker` to run.
     :param run_time: time (in seconds) to run workflow.
-    :param runner_kwargs: keyword arguments for `client.run()`. 
+    :param runner_kwargs: keyword arguments for `client.run()`.
 
     :returns: a list of results, on item per worker.
 
     """
     logger = logging.getLogger("Manager")
 
+    if not runner_kwargs:
+        runner_kwargs = {}
+
     results = []
-    pool = ThreadPool(n_workers)  # initializer=ignore_sigint)
-    logger.info("Creating {} workers".format(n_workers))
+    pool = ThreadPool(n_workers)
+    logger.info("Creating %s workers", n_workers)
     try:
         # start the client
         client.run(**runner_kwargs)
+
         # start a pool of workers
         for _ in range(n_workers):
             results.append(pool.apply_async(analysis_worker))
         pool.close()
+
         # wait a bit before closing down
         time.sleep(run_time)
         logger.info("Sending reset")
@@ -180,10 +200,10 @@ def run_workflow(client, analysis_worker, n_workers, run_time, runner_kwargs=dic
         try:
             res = result.get(3)
         except TimeoutError:
-            logger.warn("Worker function did not exit successfully.")
+            logger.warning("Worker function did not exit successfully.")
             collected.append(None)
-        except Exception as e:
-            logger.warn("Worker raise exception: {}".format(repr(e)))
+        except Exception:  # pylint: disable=broad-except
+            logger.exception("Worker raise exception:")
         else:
             logger.info("Worker exited successfully.")
             collected.append(res)
@@ -191,8 +211,9 @@ def run_workflow(client, analysis_worker, n_workers, run_time, runner_kwargs=dic
     return collected
 
 
-def main():
-    args = _get_parser().parse_args()
+def main(argv=None):
+    """simple example main cli entrypoint"""
+    args = get_parser().parse_args(argv)
 
     logging.basicConfig(
         format="[%(asctime)s - %(name)s] %(message)s",
@@ -221,4 +242,6 @@ def main():
         args.run_time,
         runner_kwargs={"min_chunk_size": args.min_chunk_size},
     )
-    # simple analysis doesn't return results
+
+    for idx, result in enumerate(results):
+        logging.info("Worker %s received %s samples", idx + 1, result)

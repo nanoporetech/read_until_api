@@ -1,3 +1,0 @@
-[submodule "minknow_api"]
-	path = minknow_api
-	url = https://github.com/nanoporetech/minknow_api.git

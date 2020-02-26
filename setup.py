@@ -1,12 +1,11 @@
+import io
 import os
-import platform
 import re
-import subprocess
-import sys
+import tempfile
+import zipfile
 
-from setuptools import setup, find_packages
-from setuptools import Distribution
 from distutils.cmd import Command
+from setuptools import setup, find_packages
 from setuptools.command.install import install
 from setuptools.command.develop import develop
 import pkg_resources
@@ -50,37 +49,55 @@ with open(os.path.join(dir_path, "requirements.txt")) as fh:
 extra_requires = {"identification": ["scrappy", "mappy"]}
 extensions = []
 
-def generate_protos(source_dir, base_out_dir):
+
+def generate_protos(base_out_dir):
     # Late import to ensure dependencies are installed when this runs.
+    # pylint: disable=import-outside-toplevel
     from grpc.tools import protoc
+    import requests
 
-    output_dir = os.path.join(base_out_dir, "read_until", "generated")
-    try:
-        os.makedirs(output_dir)
-    except:
-        pass
-    proto_root = os.path.join(source_dir, "minknow_api")
-    files_to_generate = os.path.join(proto_root, "minknow", "rpc")
-    print(
-        "Generating protobuf python for directory: '%s' into '%s': %s"
-        % (files_to_generate, output_dir, os.listdir(files_to_generate))
-    )
+    proto_source = "https://github.com/nanoporetech/minknow_api/archive/master.zip"
 
-    files = [
-        os.path.join(files_to_generate, f) for f in os.listdir(files_to_generate)
-    ]
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        request = requests.get(proto_source)
+        if not request.ok:
+            raise Exception(
+                "Failed to download protobuf sources from '%s'" % proto_source
+            )
+        zipped_content = zipfile.ZipFile(io.BytesIO(request.content))
+        zipped_content.extractall(path=tmpdirname)
 
-    proto_include = pkg_resources.resource_filename("grpc_tools", "_proto")
-    command = [
-        "grpc_tools.protoc",
-        "-I%s" % proto_root,
-        "-I%s" % proto_include,
-        "--python_out=%s" % output_dir,
-        "--grpc_python_out=%s" % output_dir,
-        *files,
-    ]
-    if protoc.main(command) != 0:
-        raise Exception("protoc error: {} failed".format(command))
+        proto_root = os.path.join(tmpdirname, os.listdir(tmpdirname)[0])
+        print("Downloaded minknow api to '%s'" % proto_root)
+
+        output_dir = os.path.join(base_out_dir, "read_until", "generated")
+        try:
+            os.makedirs(output_dir)
+        except FileExistsError:
+            pass
+        files_to_generate = os.path.join(proto_root, "minknow", "rpc")
+        assert os.path.isdir(files_to_generate)
+        print(
+            "Generating protobuf python for directory: '%s' into '%s': %s"
+            % (files_to_generate, output_dir, os.listdir(files_to_generate))
+        )
+
+        files = [
+            os.path.join(files_to_generate, f) for f in os.listdir(files_to_generate)
+        ]
+
+        proto_include = pkg_resources.resource_filename("grpc_tools", "_proto")
+        command = [
+            "grpc_tools.protoc",
+            "-I%s" % proto_root,
+            "-I%s" % proto_include,
+            "--python_out=%s" % output_dir,
+            "--grpc_python_out=%s" % output_dir,
+            *files,
+        ]
+        if protoc.main(command) != 0:
+            raise Exception("protoc error: {} failed".format(command))
+
 
 class ProtoBuildCommand(Command):
     user_options = []
@@ -93,19 +110,20 @@ class ProtoBuildCommand(Command):
 
     def run(self):
         base_dir = os.path.abspath(os.path.dirname(__file__))
-        generate_protos(base_dir, base_dir)
+        generate_protos(base_dir)
+
 
 class DevelopCommand(develop):
     def run(self):
         develop.run(self)
         base_dir = os.path.abspath(os.path.dirname(__file__))
-        generate_protos(base_dir, base_dir)
+        generate_protos(base_dir)
+
 
 class InstallCommand(install):
     def run(self):
         install.run(self)
-        base_dir = os.path.abspath(os.path.dirname(__file__))
-        generate_protos(base_dir, self.install_lib)
+        generate_protos(self.install_lib)
 
 
 setup(
@@ -115,6 +133,7 @@ setup(
     author=__author__,
     author_email="{}@nanoporetech.com".format(__author__),
     description=__description__,
+    python_requires=">=3.5",
     dependency_links=[],
     ext_modules=extensions,
     install_requires=install_requires,
@@ -126,8 +145,8 @@ setup(
     zip_safe=False,
     entry_points={
         "console_scripts": [
-            "read_until_simple = {}.simple:main".format(__pkg_name__),
-            "read_until_ident = {}.identification:main".format(__pkg_name__),
+            "read_until_simple = {}.examples.simple:main".format(__pkg_name__),
+            "read_until_ident = {}.examples.identification:main".format(__pkg_name__),
         ],
     },
     cmdclass={
