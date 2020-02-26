@@ -1,7 +1,6 @@
 variables:
   PYTHON_DOCKER_IMAGE: python:3.7-buster
   GIT_SUBMODULE_STRATEGY: recursive
-  UPLOAD_CERT: /etc/ssl/certs/ca-certificates.crt
 
 stages:
   - check
@@ -99,5 +98,5 @@ wheel upload:
   script:
       - ls dist/
       - pip install twine
-      - twine upload --cert ${UPLOAD_CERT} ./dist/*.*
+      - twine upload ./dist/*.*
   only: ["tags"]

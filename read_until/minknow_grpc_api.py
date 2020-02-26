@@ -16,9 +16,10 @@ try:
 except ImportError:
     for path in sys.path:
         potential_path_addition = os.path.join(path, "read_until", "generated")
-        if os.path.exists(
-            os.path.join(potential_path_addition, "minknow", "rpc", "data_pb2.py")
-        ):
+        generated_file = os.path.join(
+            potential_path_addition, "minknow", "rpc", "data_pb2.py"
+        )
+        if os.path.exists(generated_file):
             sys.path.append(potential_path_addition)
             path_addition = potential_path_addition
             break

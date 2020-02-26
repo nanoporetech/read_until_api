@@ -21,13 +21,13 @@ python installation:
 
     git clone https://github.com/nanoporetech/read_until_api.git
     cd read_until_api/
-    sudo /opt/ONT/MinKNOW/ont-python/bin/python setup.py install
+    sudo /opt/ont/minknow/ont-python/bin/python setup.py install
 
 To test the Read Until installation, it is possible to run the playback script
 in MinKNOW: select the "Custom Script" menu option after starting a new
 experiment. After starting playback, from a commandline run:
 
-    sudo /opt/ONT/MinKNOW/ont-python/bin/python <path/to/>read_until_api/read_until/simple.py --verbose
+    sudo /opt/ont/minknow/ont-python/bin/python <path/to/>read_until_api/read_until/simple.py --verbose
 
 Finally restart the computer.
 
@@ -39,7 +39,7 @@ The following are instructions for installing selected additional python librari
 To use the more involved examples from the Read Until API, install `scrappy` and
 `mappy`:
 
-    sudo /opt/ONT/MinKNOW/ont-python/bin/python -m pip install scrappy mappy
+    sudo /opt/ont/minknow/ont-python/bin/python -m pip install scrappy mappy
 
 To use the `scrappy` basecaller efficiently it is important to set your blas
 library to be single threaded, this is ordinarily done with:
@@ -51,8 +51,8 @@ failing to process reads in timely manner.
 
 Installing `pytorch` requires using the Python 2.7 UCS2 wheel:
 
-    sudo /opt/ONT/MinKNOW/ont-python/bin/python -m pip install http://download.pytorch.org/whl/cpu/torch-0.4.0-cp27-cp27m-linux_x86_64.whl
-    sudo /opt/ONT/MinKNOW/ont-python/bin/python -m pip install torchvision 
+    sudo /opt/ont/minknow/ont-python/bin/python -m pip install http://download.pytorch.org/whl/cpu/torch-0.4.0-cp27-cp27m-linux_x86_64.whl
+    sudo /opt/ont/minknow/ont-python/bin/python -m pip install torchvision 
 
 
 Trouble Shooting
@@ -62,8 +62,8 @@ Upgrading of python packages can interfere with the ont-python installation,
 notably if pre-existing packages are updated. To mitigate  this pip can be
 instructed to avoid upgrading packages:
 
-    sudo /opt/ONT/MinKNOW/ont-python/bin/python -m pip install --upgrade --upgrade-strategy only-if-needed <package>
+    sudo /opt/ont/minknow/ont-python/bin/python -m pip install --upgrade --upgrade-strategy only-if-needed <package>
 
 If something has gone wrong, reinstallation of MinKNOW might be useful
 following the [guide](https://community.nanoporetech.com/support/faq/test1/minknow/troubleshooting-MinKNOW/how-do-i-do-a-full-uninstall-of-minknow?search_term=uninstall)
-then manually remove the folder `/opt/ONT` and restart the computer.
+then manually remove the folder `/opt/ont` and restart the computer.

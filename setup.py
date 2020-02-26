@@ -133,6 +133,7 @@ setup(
     author=__author__,
     author_email="{}@nanoporetech.com".format(__author__),
     description=__description__,
+    python_requires=">=3.5",
     dependency_links=[],
     ext_modules=extensions,
     install_requires=install_requires,

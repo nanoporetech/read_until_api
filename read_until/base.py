@@ -187,9 +187,10 @@ class ReadUntilClient(object):
 
     >>> read_until_client.run()
 
-    The client is now recieving data and can send s
+    The client is now recieving data and can send feedback to MinKNOW.
+
     Calls to methods of `read_until_client` can then be made in a separate
-    thread. For example an continually running analysis function can be
+    thread. For example a continually running analysis function can be
     submitted to the executor as:
 
     >>> def analysis(client, *args, **kwargs):
