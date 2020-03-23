@@ -121,7 +121,7 @@ class DataService(data_pb2_grpc.DataServiceServicer):
                         if matched:
                             response_time = data_item.time - start_item.time
                             assert response_time >= 0
-                            response_times.append(response_time)
+                    response_times.append(response_time)
                     start_item = None
                 else:
                     start_item = data_item
