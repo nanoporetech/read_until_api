@@ -32,22 +32,24 @@ class ReadCache:
 
     def __setitem__(self, key, value):
         with self.lock:
-            counted = False
-            while len(self.dict) >= self.size:
-                counted = True
-                k, popped_value = self.dict.popitem(last=False)
-                if k == key and popped_value.number == value.number:
+            # Check if same read
+            if key in self.dict:
+                if self.dict[key].number == value.number:
+                    # Same read
                     self.replaced += 1
                 else:
+                    # Different read
                     self.missed += 1
-            if key in self.dict:
-                if not counted:
-                    if self.dict[key].number == value.number:
-                        self.replaced += 1
-                    else:
-                        self.missed += 1
+                # Remove the old chunk
                 del self.dict[key]
+
+            # Set the new chunk
             self.dict[key] = value
+
+            # Check that we aren't above max size
+            while len(self.dict) > self.size:
+                k, v = self.dict.popitem(last=False)
+                self.missed += 1
 
     def __delitem__(self, key):
         with self.lock:
