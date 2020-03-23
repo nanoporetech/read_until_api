@@ -94,7 +94,7 @@ def test_order():
     channel = max_size - 1
     _, read = generate_read(channel=channel, number=rc[channel].number + 1)
     rc[channel] = read
-    order.append(order.pop(channel-1))
+    order.append(order.pop(channel - 1))
 
     assert list(rc.dict.keys()) == order, "Key order wrong after update"
 
@@ -284,14 +284,14 @@ def test_attributes():
     # Test missed
     # Refill all reads with different read numbers
     for c in range(1, max_size + 1):
-        channel, read = generate_read(channel=c, number=c+1)
+        channel, read = generate_read(channel=c, number=c + 1)
         rc[channel] = read
 
     assert rc.missed == max_size, ".missed is wrong"
 
     # Test replaced
     for c in range(1, max_size + 1):
-        channel, read = generate_read(channel=c, number=c+1)
+        channel, read = generate_read(channel=c, number=c + 1)
         rc[channel] = read
 
     assert rc.replaced == max_size, ".replaces is wrong"
@@ -310,7 +310,7 @@ def test_accumulating_setitem():
 
 def add_to_cache(cache, n=10):
     """Add n reads to a Cache"""
-    for i in range(1, n+1):
+    for i in range(1, n + 1):
         channel, read = generate_read(channel=i)
         cache[channel] = read
 
@@ -336,6 +336,10 @@ def test_threaded_access():
         iterations += 1
         time.sleep(pause)
 
-    print(f"\n\n{got}/{exp} ({iterations} iterations)")
+    print(
+        "\n\n{got}/{exp} ({iterations} iterations)".format(
+            got=got, exp=exp, iterations=iterations,
+        )
+    )
 
     assert got == exp
