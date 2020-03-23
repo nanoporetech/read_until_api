@@ -267,11 +267,15 @@ def test_attributes():
 
     assert rc.size == max_size, ".size is wrong"
 
+    # Fill the cache
     for c in range(1, max_size + 1):
         channel, read = generate_read(channel=c, number=c)
         rc[channel] = read
 
+    assert len(rc) == rc.size
+
     # Test missed
+    # Refill all reads with different read numbers
     for c in range(1, max_size + 1):
         channel, read = generate_read(channel=c, number=c+1)
         rc[channel] = read
