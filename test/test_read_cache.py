@@ -9,7 +9,7 @@ import time
 import pytest
 import numpy
 
-from read_until.read_cache import ReadCache
+from read_until.read_cache import AccumulatingCache, ReadCache
 from read_until.generated.minknow.rpc import data_pb2
 
 
@@ -124,8 +124,8 @@ def test_setitem():
     assert len(rc) == 1, "ReadCache has wrong size"
 
     # Maybe unnecessary, in the future may want to raise NotImplemented
-    with pytest.raises(AttributeError):
-        rc.setdefault(generate_read(channel=2))
+    # with pytest.raises(AttributeError):
+    #     rc.setdefault(generate_read(channel=2))
 
     assert len(rc) == 1, "ReadCache has wrong size"
 
@@ -297,6 +297,17 @@ def test_attributes():
     assert rc.replaced == max_size, ".replaces is wrong"
 
 
+def test_accumulating_setitem():
+    rc = AccumulatingCache()
+
+    channel, read = generate_read(channel=1)
+    rc[channel] = read
+    assert len(rc) == 1, "ReadCache has wrong size"
+
+    rc.__setitem__(*generate_read(channel=3))
+    assert len(rc) == 2, "ReadCache has wrong size"
+
+
 def add_to_cache(cache, n=10):
     """Add n reads to a Cache"""
     for i in range(1, n+1):
@@ -325,10 +336,6 @@ def test_threaded_access():
         iterations += 1
         time.sleep(pause)
 
-    print("\n\n{got}/{exp} ({iterations} iterations)".format(
-        got=got,
-        exp=exp,
-        iterations=iterations,
-    ))
+    print(f"\n\n{got}/{exp} ({iterations} iterations)")
 
     assert got == exp
