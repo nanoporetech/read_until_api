@@ -101,6 +101,7 @@ class DataService(data_pb2_grpc.DataServiceServicer):
     def find_response_times(self) -> typing.List[float]:
         """Find response times (in seconds) based on sent/received data from the server"""
         response_times = []
+        response_time = 0
         for _channel, data in self.channel_data.items():
             start_item = None
             for data_item in data:
@@ -120,7 +121,7 @@ class DataService(data_pb2_grpc.DataServiceServicer):
                         # so we dont get match
                         if matched:
                             response_time = data_item.time - start_item.time
-                            assert response_time >= 0
+                            assert response_time > 0
                     response_times.append(response_time)
                     start_item = None
                 else:
