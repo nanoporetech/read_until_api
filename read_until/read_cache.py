@@ -3,22 +3,57 @@
 ReadCaches for the ReadUntilClient
 """
 from collections import OrderedDict
-from threading import Lock
+from collections.abc import MutableMapping
+from threading import RLock as Lock
 
 
-class ReadCache:
-    """An ordered and keyed queue of a maximum size to store read chunks."""
+class ReadCache(MutableMapping):
+    """A thread-safe dict-like container with a maximum size
+    This ReadCache contains all the required methods for working as an ordered
+    cache with a max size.
+
+    When implementing a ReadCache, this can be subclassed and a custom method
+    for __setitem__ provided, see examples.
+
+    Parameters
+    ----------
+    size : int
+        The maximum number of items to hold
+
+    Attributes
+    ----------
+    size : int
+        The maximum size of the cache
+    missed : int
+        The number items never removed from the queue
+    replaced : int
+        The number of items replaced by a newer item (reads chunks replaced by a
+        chunk from the same read)
+    dict : OrderedDict
+        An instance of an OrderedDict that forms the read cache
+    lock : threading.Rlock
+        The instance of the lock used to make the cache thread-safe
+
+    Examples
+    --------
+    When inheriting from ReadCache only the __setitem__ method needs to be
+    included. The attribute `self.dict` is an instance of OrderedDict that
+    forms the cache so this is the object that must be updated.
+
+    This example is not likely to be a good cache.
+
+    >>> class DerivedCache(ReadCache):
+    ...     def __setitem__(self, key, value):
+    ...         # The lock is required to maintain thread-safety
+    ...         with self.lock:
+    ...             # Logic to apply when adding items to the cache
+    ...             self.dict[key] = value
+    """
 
     def __init__(self, size=100):
-        """
-        :param size: maximum number of entries, when more entries are added
-           the oldest current entries will be removed.
-
-        The attributes .missed and .replaced count the total number of reads
-        never popped, and the number of reads chunks replaced by a chunk from
-        the same read.
-        """
         if size < 1:
+            # FIXME: ValueError maybe more appropriate
+            #  https://docs.python.org/3/library/exceptions.html#ValueError
             raise AttributeError("'size' must be >1.")
         self.size = size
         self.dict = OrderedDict()
@@ -27,10 +62,12 @@ class ReadCache:
         self.replaced = 0
 
     def __getitem__(self, key):
+        """Delegate with lock."""
         with self.lock:
             return self.dict[key]
 
     def __setitem__(self, key, value):
+        """Add items to self.dict, evicting oldest items if cache is at capacity"""
         with self.lock:
             # Check if same read
             if key in self.dict:
@@ -52,36 +89,69 @@ class ReadCache:
                 self.missed += 1
 
     def __delitem__(self, key):
+        """Delegate with lock."""
         with self.lock:
             del self.dict[key]
 
     def __len__(self):
-        return len(self.dict)
+        """Delegate with lock."""
+        with self.lock:
+            return len(self.dict)
+
+    def __iter__(self):
+        """Delegate with lock."""
+        with self.lock:
+            yield from self.dict.__iter__()
 
     def popitem(self, last=True):
-        """Return the newest (or oldest) entry.
-
-        :param last: if `True` return the newest entry, else the oldest.
-
-        """
+        """Delegate with lock."""
         with self.lock:
             return self.dict.popitem(last=last)
 
-    def popitems(self, items, last=True):
-        """Return a list of the newest (or oldest) entries.
+    def popitems(self, items=1, last=True):
+        """Return a list of popped items from the cache.
 
-        :param items: maximum number of items to return, zero items may
-            be return (i.e. an empty list).
-        :param last: if `True` return the newest entry, else the oldest.
+        Parameters
+        ----------
+        items : int
+            Maximum number of items to return
+        last : bool
+            If True, return the newest entry (LIFO); else the oldest (FIFO).
 
+        Returns
+        -------
+        list
+            Output list of upto `items` (key, value) pairs from the cache
         """
+        if items > self.size:
+            items = self.size
+
         with self.lock:
-            data = list()
-            for _ in range(items):
-                try:
-                    item = self.dict.popitem(last=last)
-                except KeyError:
-                    pass
+            data = []
+            while self.dict and len(data) != items:
+                data.append(self.dict.popitem(last=last))
+        return data
+
+
+class AccumulatingCache(ReadCache):
+    def __setitem__(self, key, value):
+        """Cache that accumulates read chunks as they are received"""
+        with self.lock:
+            if key not in self.dict:
+                # Key not in dict
+                self.dict[key] = value
+            else:
+                # Key exists
+                if self.dict[key].number == value.number:
+                    # Same read, update raw_data
+                    self.dict[key].raw_data += value.raw_data
+                    self.replaced += 1
                 else:
-                    data.append(item)
-            return data
+                    # New read
+                    self.dict[key] = value
+                    self.missed += 1
+
+            self.dict.move_to_end(key)
+
+            if len(self) > self.size:
+                k, v = self.popitem(last=False)
