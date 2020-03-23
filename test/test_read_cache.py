@@ -98,6 +98,13 @@ def test_order():
 
     assert list(rc.dict.keys()) == order, "Key order wrong after update"
 
+    # Add another read not in cache, should remove oldest read
+    channel, read = generate_read(channel=max_size + 1)
+    rc[channel] = read
+    order.pop(0)
+    order.append(channel)
+    assert list(rc.dict.keys()) == order, "Key order wrong after update"
+
 
 def test_empty():
     rc = ReadCache()
