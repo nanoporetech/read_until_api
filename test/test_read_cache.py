@@ -325,6 +325,10 @@ def test_threaded_access():
         iterations += 1
         time.sleep(pause)
 
-    print(f"\n\n{got}/{exp} ({iterations} iterations)")
+    print("\n\n{got}/{exp} ({iterations} iterations)".format(
+        got=got,
+        exp=exp,
+        iterations=iterations,
+    ))
 
     assert got == exp
