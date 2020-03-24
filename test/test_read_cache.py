@@ -16,6 +16,25 @@ from read_until.generated.minknow.rpc import data_pb2
 def generate_read(**kwargs):
     """Generate a (channel, ReadData) tuple, using random numbers
 
+    Other Parameters
+    ----------------
+    channel : int
+        Channel number to give the read
+    id : str
+        Read ID to give the read
+    number : int
+        Number to give the read. Two chunks with the same number and channel are
+        considered the same read.
+    start_sample : int
+    chunk_start_sample : int
+    chunk_length : int
+    chunk_classifications : List[int,]
+    raw_data : bytes
+        Raw bytes from int16 or float32
+    median_before : float
+        Drawn from random.uniform(200, 250)
+    median : float
+        Drawn from random.uniform(100, 120)
     """
     # If channel not in kwargs use a random int
     if "channel" in kwargs:
@@ -205,6 +224,23 @@ def test_len():
     assert rc.__len__() == max_size, "ReadCache is wrong size"
 
 
+def test_iter():
+    max_size = 5
+    rc = ReadCache(max_size)
+
+    keys = []
+    for c in range(1, max_size + 1):
+        channel, read = generate_read(channel=c)
+        rc[channel] = read
+        keys.append(channel)
+
+    iter_keys = []
+    for k, v in rc.items():
+        iter_keys.append(k)
+
+    assert keys == iter_keys
+
+
 def test_popitem():
     max_size = 5
     rc = ReadCache(max_size)
@@ -260,11 +296,20 @@ def test_popitems():
     assert len(reads) == pop_n, "Wrong number of reads returned"
     assert len(rc) == size, "ReadCache is wrong size"
 
-    # Pop remaining items
+    # Pop remaining items at max_size
     reads = rc.popitems(max_size, last=True)
     assert not rc, "ReadCache should be empty"
     assert len(reads) == size, "Wrong number of reads returned"
     assert list(reversed(keys)) == [ch for ch, _ in reads], "Reads in wrong order"
+
+    # Re-fill and request more than max_size
+    for c in range(1, max_size + 1):
+        channel, read = generate_read(channel=c)
+        rc[channel] = read
+
+    reads = rc.popitems(2 * max_size)
+    assert not rc, "ReadCache should be empty"
+    assert len(reads) == max_size, "Wrong number of reads returned"
 
 
 def test_attributes():
@@ -298,14 +343,43 @@ def test_attributes():
 
 
 def test_accumulating_setitem():
-    rc = AccumulatingCache()
+    max_size = 5
+    rc = AccumulatingCache(max_size)
 
-    channel, read = generate_read(channel=1)
+    read_len = []
+
+    # Normal set
+    channel, read = generate_read(channel=1, number=1)
     rc[channel] = read
-    assert len(rc) == 1, "ReadCache has wrong size"
 
+    # log raw_data length
+    read_len.append(len(read.raw_data))
+
+    assert len(rc) == 1, "ReadCache has wrong size"
+    assert len(rc[1].raw_data) == sum(read_len)
+
+    # __setitem__
     rc.__setitem__(*generate_read(channel=3))
     assert len(rc) == 2, "ReadCache has wrong size"
+
+    # Same read, new chunk
+    channel, read = generate_read(channel=1, number=1)
+    rc[channel] = read
+
+    # log raw_data length
+    read_len.append(len(read.raw_data))
+
+    assert len(rc[1].raw_data) == sum(read_len)
+
+    # New read for channel 1
+    channel, read = generate_read(channel=1, number=10)
+    rc[channel] = read
+
+    # Fill cache, test max_size
+    for i in range(10, 10 + max_size):
+        rc.__setitem__(*generate_read(channel=i))
+
+    assert len(rc) == max_size
 
 
 def add_to_cache(cache, n=10):
