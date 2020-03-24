@@ -390,7 +390,7 @@ def add_to_cache(cache, n=10):
 
 
 def test_threaded_access():
-    # Init ReacCache up-to MinION size
+    # Init ReadCache up-to MinION size
     rc = ReadCache(512)
 
     # Create random number of reads
