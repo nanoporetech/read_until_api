@@ -128,7 +128,7 @@ def test_order():
 def test_empty():
     rc = ReadCache()
     assert len(rc) == 0, "Not empty"
-    assert rc.__len__() == 0, "Not empty"
+
     channel, read = generate_read()
     rc[channel] = read
     rc.dict.clear()
@@ -142,14 +142,7 @@ def test_setitem():
     rc[channel] = read
     assert len(rc) == 1, "ReadCache has wrong size"
 
-    # Maybe unnecessary, in the future may want to raise NotImplemented
-    # with pytest.raises(AttributeError):
-    #     rc.setdefault(generate_read(channel=2))
-
-    assert len(rc) == 1, "ReadCache has wrong size"
-
-    rc.__setitem__(*generate_read(channel=3))
-
+    rc.setdefault(*generate_read(channel=3))
     assert len(rc) == 2, "ReadCache has wrong size"
 
 
@@ -165,9 +158,6 @@ def test_getitem():
 
     # Get last set item, should be the same as `read`
     r = rc[last]
-    assert read == r, "Reads do not match"
-
-    r = rc.__getitem__(last)
     assert read == r, "Reads do not match"
 
     with pytest.raises(KeyError):
@@ -187,13 +177,17 @@ def test_del():
     assert list(rc.dict.keys()) == list(range(1, max_size + 1)), "Keys mismatch"
 
     del rc[last]
-    assert last not in rc.dict.keys(), "Deleted key still in ReadCache"
+    assert last not in rc, "Deleted key still in ReadCache"
 
-    last -= 1
-    rc.__delitem__(last)
-    assert last not in rc.dict.keys(), "Deleted key still in ReadCache"
 
-    rc.dict.clear()
+def test_clear():
+    max_size = 5
+    rc = ReadCache(max_size)
+
+    for c in range(1, max_size + 1):
+        rc.setdefault(*generate_read(channel=c))
+
+    rc.clear()
     assert len(rc) == 0, "ReadCache cleared but not empty"
 
 
@@ -204,7 +198,7 @@ def test_bool():
     """
     rc = ReadCache()
     assert not rc, "ReadCache not False"
-    rc.__setitem__(*generate_read())
+    rc.setdefault(*generate_read())
     assert rc, "ReadCache not True"
 
 
@@ -213,7 +207,6 @@ def test_len():
     rc = ReadCache(max_size)
 
     assert len(rc) == 0, "ReadCache not empty"
-    assert rc.__len__() == 0, "ReadCache not empty"
 
     for c in range(1, max_size + 1):
         channel, read = generate_read(channel=c)
@@ -221,7 +214,6 @@ def test_len():
         last = c
 
     assert len(rc) == max_size, "ReadCache is wrong size"
-    assert rc.__len__() == max_size, "ReadCache is wrong size"
 
 
 def test_iter():
@@ -358,8 +350,7 @@ def test_accumulating_setitem():
     assert len(rc) == 1, "ReadCache has wrong size"
     assert len(rc[1].raw_data) == sum(read_len)
 
-    # __setitem__
-    rc.__setitem__(*generate_read(channel=3))
+    rc.setdefault(*generate_read(channel=3))
     assert len(rc) == 2, "ReadCache has wrong size"
 
     # Same read, new chunk
@@ -377,7 +368,7 @@ def test_accumulating_setitem():
 
     # Fill cache, test max_size
     for i in range(10, 10 + max_size):
-        rc.__setitem__(*generate_read(channel=i))
+        rc.setdefault(*generate_read(channel=i))
 
     assert len(rc) == max_size
 
