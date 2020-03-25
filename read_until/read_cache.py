@@ -31,7 +31,7 @@ class ReadCache(MutableMapping):
     replaced : int
         The number of items replaced by a newer item (read chunks replaced by a
         chunk from the same read)
-    dict : collections.OrderedDict
+    _dict : collections.OrderedDict
         An instance of an OrderedDict that forms the read cache
     lock : threading.Rlock
         The instance of the lock used to make the cache thread-safe
@@ -39,7 +39,7 @@ class ReadCache(MutableMapping):
     Examples
     --------
     When inheriting from ReadCache only the __setitem__ method needs to be
-    overridden. The attribute `self.dict` is an instance of OrderedDict that
+    overridden. The attribute `self._dict` is an instance of OrderedDict that
     forms the cache so this is the object that must be updated.
 
     This example is not likely to be a good cache.
@@ -58,7 +58,7 @@ class ReadCache(MutableMapping):
             #  https://docs.python.org/3/library/exceptions.html#ValueError
             raise AttributeError("'size' must be >1.")
         self.size = size
-        self.dict = OrderedDict()
+        self._dict = OrderedDict()
         self.lock = RLock()
         self.missed = 0
         self.replaced = 0
@@ -66,7 +66,7 @@ class ReadCache(MutableMapping):
     def __getitem__(self, key):
         """Delegate with lock."""
         with self.lock:
-            return self.dict[key]
+            return self._dict[key]
 
     def __setitem__(self, key, value):
         """Add items to ReadCache, evicting the oldest items if at capacity
@@ -85,43 +85,48 @@ class ReadCache(MutableMapping):
         """
         with self.lock:
             # Check if same read
-            if key in self.dict:
-                if self.dict[key].number == value.number:
+            if key in self._dict:
+                if self._dict[key].number == value.number:
                     # Same read
                     self.replaced += 1
                 else:
                     # Different read
                     self.missed += 1
                 # Remove the old chunk
-                del self.dict[key]
+                del self._dict[key]
 
             # Set the new chunk
-            self.dict[key] = value
+            self._dict[key] = value
 
             # Check that we aren't above max size
-            while len(self.dict) > self.size:
-                k, v = self.dict.popitem(last=False)
+            while len(self._dict) > self.size:
+                k, v = self._dict.popitem(last=False)
                 self.missed += 1
 
     def __delitem__(self, key):
         """Delegate with lock."""
         with self.lock:
-            del self.dict[key]
+            del self._dict[key]
 
     def __len__(self):
         """Delegate with lock."""
         with self.lock:
-            return len(self.dict)
+            return len(self._dict)
 
     def __iter__(self):
         """Delegate with lock."""
         with self.lock:
-            yield from self.dict.__iter__()
+            yield from self._dict.__iter__()
+
+    def keys(self):
+        """Delegate with lock."""
+        with self.lock:
+            return self._dict.keys()
 
     def popitem(self, last=True):
         """Delegate with lock."""
         with self.lock:
-            return self.dict.popitem(last=last)
+            return self._dict.popitem(last=last)
 
     def popitems(self, items=1, last=True):
         """Return a list of popped items from the cache.
@@ -143,8 +148,8 @@ class ReadCache(MutableMapping):
 
         with self.lock:
             data = []
-            while self.dict and len(data) != items:
-                data.append(self.dict.popitem(last=last))
+            while self._dict and len(data) != items:
+                data.append(self._dict.popitem(last=last))
         return data
 
 
@@ -171,8 +176,8 @@ class AccumulatingCache(ReadCache):
         """
         with self.lock:
             if key not in self:
-                # Key not in dict
-                self.dict[key] = value
+                # Key not in _dict
+                self._dict[key] = value
             else:
                 # Key exists
                 if self[key].number == value.number:
@@ -181,10 +186,10 @@ class AccumulatingCache(ReadCache):
                     self.replaced += 1
                 else:
                     # New read
-                    self.dict[key] = value
+                    self._dict[key] = value
                     self.missed += 1
 
-            self.dict.move_to_end(key)
+            self._dict.move_to_end(key)
 
             if len(self) > self.size:
                 k, v = self.popitem(last=False)

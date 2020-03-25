@@ -93,7 +93,7 @@ def test_update_key():
         _, read = generate_read(channel=channel, number=read_number + i)
         rc[channel] = read
 
-    assert list(rc.dict.keys()) == [channel], "Keys are wrong"
+    assert list(rc.keys()) == [channel], "Keys are wrong"
     assert len(rc) == 1, "Wrong number of entries"
     assert rc[channel].number != read_number, "read might have not been updated"
 
@@ -107,7 +107,7 @@ def test_order():
         rc[channel] = read
         order.append(channel)
 
-    assert list(rc.dict.keys()) == order, "Keys in wrong order"
+    assert list(rc.keys()) == order, "Keys in wrong order"
 
     # Move read 4 to end by updating
     channel = max_size - 1
@@ -115,24 +115,19 @@ def test_order():
     rc[channel] = read
     order.append(order.pop(channel - 1))
 
-    assert list(rc.dict.keys()) == order, "Key order wrong after update"
+    assert list(rc.keys()) == order, "Key order wrong after update"
 
     # Add another read not in cache, should remove oldest read
     channel, read = generate_read(channel=max_size + 1)
     rc[channel] = read
     order.pop(0)
     order.append(channel)
-    assert list(rc.dict.keys()) == order, "Key order wrong after update"
+    assert list(rc.keys()) == order, "Key order wrong after update"
 
 
 def test_empty():
     rc = ReadCache()
     assert len(rc) == 0, "Not empty"
-
-    channel, read = generate_read()
-    rc[channel] = read
-    rc.dict.clear()
-    assert len(rc) == 0, "Not empty after clear"
 
 
 def test_setitem():
@@ -173,9 +168,7 @@ def test_del():
         rc[channel] = read
         last = c
 
-    assert len(rc) == max_size, "ReadCache is wrong size"
-    assert list(rc.dict.keys()) == list(range(1, max_size + 1)), "Keys mismatch"
-
+    assert last in rc, "Key to be deleted not in ReadCache"
     del rc[last]
     assert last not in rc, "Deleted key still in ReadCache"
 
@@ -243,14 +236,14 @@ def test_popitem():
         rc[channel] = read
         keys.append(channel)
 
-    assert list(rc.dict.keys()) == keys, "Keys not in order added"
+    assert list(rc.keys()) == keys, "Keys not in order added"
 
     # pop last then first
     for lifo in [True, False]:
         idx = -1 if lifo else 0
         rc.popitem(lifo)
         keys.pop(idx)
-        assert list(rc.dict.keys()) == keys, "Key order wrong"
+        assert list(rc.keys()) == keys, "Key order wrong"
 
 
 def test_popitems():
@@ -266,7 +259,7 @@ def test_popitems():
         rc[channel] = read
         keys.append(channel)
 
-    assert list(rc.dict.keys()) == keys, "Keys not in order added"
+    assert list(rc.keys()) == keys, "Keys not in order added"
 
     pop_n = 3
 
@@ -275,7 +268,7 @@ def test_popitems():
     reads = rc.popitems(pop_n, lifo)
     size -= pop_n
     keys = keys[:-pop_n]
-    assert list(rc.dict.keys()) == keys, "Keys not right"
+    assert list(rc.keys()) == keys, "Keys not right"
     assert len(reads) == pop_n, "Wrong number of reads returned"
     assert len(rc) == size, "ReadCache is wrong size"
 
@@ -284,7 +277,7 @@ def test_popitems():
     reads = rc.popitems(pop_n, lifo)
     size -= pop_n
     keys = keys[pop_n:]
-    assert list(rc.dict.keys()) == keys, "Keys not right"
+    assert list(rc.keys()) == keys, "Keys not right"
     assert len(reads) == pop_n, "Wrong number of reads returned"
     assert len(rc) == size, "ReadCache is wrong size"
 
