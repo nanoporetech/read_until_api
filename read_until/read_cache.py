@@ -49,7 +49,7 @@ class ReadCache(MutableMapping):
     ...         # The lock is required to maintain thread-safety
     ...         with self.lock:
     ...             # Logic to apply when adding items to the cache
-    ...             self.dict[key] = value
+    ...             self._dict[key] = value
     """
 
     def __init__(self, size=100):
