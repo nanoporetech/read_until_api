@@ -4,7 +4,7 @@ ReadCaches for the ReadUntilClient
 """
 from collections import OrderedDict
 from collections.abc import MutableMapping
-from threading import RLock as Lock
+from threading import RLock
 
 
 class ReadCache(MutableMapping):
@@ -57,7 +57,7 @@ class ReadCache(MutableMapping):
             raise AttributeError("'size' must be >1.")
         self.size = size
         self.dict = OrderedDict()
-        self.lock = Lock()
+        self.lock = RLock()
         self.missed = 0
         self.replaced = 0
 
