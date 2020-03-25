@@ -9,6 +9,7 @@ from threading import RLock
 
 class ReadCache(MutableMapping):
     """A thread-safe dict-like container with a maximum size
+
     This ReadCache contains all the required methods for working as an ordered
     cache with a max size.
 
@@ -25,11 +26,12 @@ class ReadCache(MutableMapping):
     size : int
         The maximum size of the cache
     missed : int
-        The number items never removed from the queue
+        The number of items deleted from the cache (read chunks replaced by a
+        chunk from a different read)
     replaced : int
-        The number of items replaced by a newer item (reads chunks replaced by a
+        The number of items replaced by a newer item (read chunks replaced by a
         chunk from the same read)
-    dict : OrderedDict
+    dict : collections.OrderedDict
         An instance of an OrderedDict that forms the read cache
     lock : threading.Rlock
         The instance of the lock used to make the cache thread-safe
@@ -37,7 +39,7 @@ class ReadCache(MutableMapping):
     Examples
     --------
     When inheriting from ReadCache only the __setitem__ method needs to be
-    included. The attribute `self.dict` is an instance of OrderedDict that
+    overridden. The attribute `self.dict` is an instance of OrderedDict that
     forms the cache so this is the object that must be updated.
 
     This example is not likely to be a good cache.
@@ -67,7 +69,20 @@ class ReadCache(MutableMapping):
             return self.dict[key]
 
     def __setitem__(self, key, value):
-        """Add items to self.dict, evicting oldest items if cache is at capacity"""
+        """Add items to ReadCache, evicting the oldest items if at capacity
+
+        Parameters
+        ----------
+        key : int
+            Channel number for the read chunk
+        value : minknow.rpc.data_pb2.GetLiveReadsResponse.ReadData
+            Live read data object from MinKNOW rpc. Requires attributes:
+            `number`.
+
+        Returns
+        -------
+        None
+        """
         with self.lock:
             # Check if same read
             if key in self.dict:
@@ -135,16 +150,34 @@ class ReadCache(MutableMapping):
 
 class AccumulatingCache(ReadCache):
     def __setitem__(self, key, value):
-        """Cache that accumulates read chunks as they are received"""
+        """Cache that accumulates read chunks as they are received
+
+        Parameters
+        ----------
+        key : int
+            Channel number for the read chunk
+        value : minknow.rpc.data_pb2.GetLiveReadsResponse.ReadData
+            Live read data object from MinKNOW rpc. Requires attributes:
+            `number` and `raw_data`.
+
+        Notes
+        -----
+        In this implementation attribute `replaced` counts reads where the
+        `raw_data` is accumulated, not replaced.
+
+        Returns
+        -------
+        None
+        """
         with self.lock:
-            if key not in self.dict:
+            if key not in self:
                 # Key not in dict
                 self.dict[key] = value
             else:
                 # Key exists
-                if self.dict[key].number == value.number:
+                if self[key].number == value.number:
                     # Same read, update raw_data
-                    self.dict[key].raw_data += value.raw_data
+                    self[key].raw_data += value.raw_data
                     self.replaced += 1
                 else:
                     # New read
