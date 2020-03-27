@@ -11,14 +11,14 @@ from threading import Event, Thread
 import grpc
 import numpy
 
-from .minknow_grpc_api import (
+from read_until.minknow_grpc_api import (
     acquisition_pb2,
     acquisition_pb2_grpc,
     analysis_configuration_pb2_grpc,
     data_pb2,
     data_pb2_grpc,
 )
-from .read_cache import ReadCache
+from read_until.read_cache import ReadCache
 
 __all__ = ["ReadUntilClient"]
 
