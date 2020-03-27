@@ -13,36 +13,25 @@ class ReadCache(MutableMapping):
     This ReadCache contains all the required methods for working as an ordered
     cache with a max size.
 
-    When implementing a ReadCache, this can be subclassed and a custom method
-    for __setitem__ provided, see examples.
+    When implementing a ReadCache, this can be subclassed and a __setitem__
+    overridden, see examples.
 
-    Parameters
-    ----------
-    size : int
-        The maximum number of items to hold
+    :ivar size: The maximum size of the ReadCache
+    :type size: int
+    :ivar missed: The number of items deleted from the cache (read chunks replaced by a chunk from a different read)
+    :type missed: int
+    :ivar replaced: The number of items replaced by a newer item (read chunks replaced by a chunk from the same read)
+    :type replaced: int
+    :ivar _dict: An instance of an OrderedDict that forms the read cache
+    :type _dict: collections.OrderedDict
+    :ivar lock: The instance of the lock used to make the cache thread-safe
+    :type lock: threading.Rlock
 
-    Attributes
-    ----------
-    size : int
-        The maximum size of the cache
-    missed : int
-        The number of items deleted from the cache (read chunks replaced by a
-        chunk from a different read)
-    replaced : int
-        The number of items replaced by a newer item (read chunks replaced by a
-        chunk from the same read)
-    _dict : collections.OrderedDict
-        An instance of an OrderedDict that forms the read cache
-    lock : threading.Rlock
-        The instance of the lock used to make the cache thread-safe
+    :Example:
 
-    Examples
-    --------
     When inheriting from ReadCache only the __setitem__ method needs to be
     overridden. The attribute `self._dict` is an instance of OrderedDict that
     forms the cache so this is the object that must be updated.
-
-    This example is not likely to be a good cache.
 
     >>> class DerivedCache(ReadCache):
     ...     def __setitem__(self, key, value):
@@ -50,9 +39,16 @@ class ReadCache(MutableMapping):
     ...         with self.lock:
     ...             # Logic to apply when adding items to the cache
     ...             self._dict[key] = value
+
+    .. note:: This example is not likely to be a good cache.
     """
 
     def __init__(self, size=100):
+        """Initialise ReadCache
+
+        :param size: The maximum size of the ReadCache, defaults to 100
+        :type size: int, optional
+        """
         if size < 1:
             # FIXME: ValueError maybe more appropriate
             #  https://docs.python.org/3/library/exceptions.html#ValueError
@@ -71,17 +67,12 @@ class ReadCache(MutableMapping):
     def __setitem__(self, key, value):
         """Add items to ReadCache, evicting the oldest items if at capacity
 
-        Parameters
-        ----------
-        key : int
-            Channel number for the read chunk
-        value : minknow.rpc.data_pb2.GetLiveReadsResponse.ReadData
-            Live read data object from MinKNOW rpc. Requires attributes:
-            `number`.
+        :param key: Channel number for the read chunk
+        :type key: int
+        :param value: Live read data object from MinKNOW rpc. Requires attribute ``number``
+        :type value: minknow.rpc.data_pb2.GetLiveReadsResponse.ReadData
 
-        Returns
-        -------
-        None
+        :returns: None
         """
         with self.lock:
             # Check if same read
@@ -131,17 +122,13 @@ class ReadCache(MutableMapping):
     def popitems(self, items=1, last=True):
         """Return a list of popped items from the cache.
 
-        Parameters
-        ----------
-        items : int
-            Maximum number of items to return
-        last : bool
-            If True, return the newest entry (LIFO); else the oldest (FIFO).
+        :param items: Maximum number of items to return
+        :type items: int
+        :param last: If True, return the newest entry (LIFO); else the oldest (FIFO).
+        :type last: bool
 
-        Returns
-        -------
-        list
-            Output list of upto `items` (key, value) pairs from the cache
+        :returns: Output list of upto `items` (key, value) pairs from the cache
+        :rtype: list
         """
         if items > self.size:
             items = self.size
@@ -157,22 +144,14 @@ class AccumulatingCache(ReadCache):
     def __setitem__(self, key, value):
         """Cache that accumulates read chunks as they are received
 
-        Parameters
-        ----------
-        key : int
-            Channel number for the read chunk
-        value : minknow.rpc.data_pb2.GetLiveReadsResponse.ReadData
-            Live read data object from MinKNOW rpc. Requires attributes:
-            `number` and `raw_data`.
+        :param key: Channel number for the read chunk
+        :type key: int
+        :param value: Live read data object from MinKNOW rpc. Requires attributes `number` and `raw_data`.
+        :type value: minknow.rpc.data_pb2.GetLiveReadsResponse.ReadData
 
-        Notes
-        -----
-        In this implementation attribute `replaced` counts reads where the
-        `raw_data` is accumulated, not replaced.
+        :returns: None
 
-        Returns
-        -------
-        None
+        .. notes:: In this implementation attribute `replaced` counts reads where the `raw_data` is accumulated, not replaced.
         """
         with self.lock:
             if key not in self:
