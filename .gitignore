@@ -7,7 +7,9 @@
 .#*
 *.egg-info
 .venv/
+.venv3/
 .vscode/
+.idea/
 build
 dist
 deb_dist
