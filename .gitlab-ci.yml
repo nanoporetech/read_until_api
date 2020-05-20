@@ -89,7 +89,7 @@ install_wheel:
   image: ${PYTHON_DOCKER_IMAGE}
   dependencies: ["build_wheel"]
   script:
-    - pip install dist/*
+    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local dist/*
 
 wheel upload:
   stage: deploy
