@@ -1,18 +1,20 @@
+import sys
 from setuptools import setup, find_packages
 
 
 PKG_NAME = "read_until"
 AUTHOR = "Oxford Nanopore Technologies Ltd"
 
-__version__ = ""
-exec(open("{}/_version.py".format(PKG_NAME)).read())
+sys.path.insert(0, "./{}".format(PKG_NAME))
+from _version import __version__ as VERSION
+del sys.path[0]
 
 with open("requirements.txt") as reqs:
     install_requires = [pkg.strip() for pkg in reqs]
 
 setup(
     name=PKG_NAME,
-    version=__version__,
+    version=VERSION,
     author=AUTHOR,
     author_email="info@nanoporetech.com",
     description="Read Until API",
