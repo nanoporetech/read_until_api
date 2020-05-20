@@ -1,6 +1,2 @@
-
-grpcio
-grpcio-tools
-numpy
-protobuf
-requests
+numpy>=1.17.4
+minknow-api

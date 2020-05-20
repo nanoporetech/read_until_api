@@ -13,7 +13,7 @@ import time
 import typing
 
 import grpc
-from read_until.minknow_grpc_api import (
+from minknow_api import (
     acquisition_pb2,
     acquisition_pb2_grpc,
     data_pb2,

@@ -11,7 +11,7 @@ from threading import Event, Thread
 import grpc
 import numpy
 
-from read_until.minknow_grpc_api import (
+from minknow_api import (
     acquisition_pb2,
     acquisition_pb2_grpc,
     analysis_configuration_pb2_grpc,
@@ -63,6 +63,7 @@ def _numpy_type(desc):
     return numpy.dtype(type_desc)
 
 
+# TODO: replace with nice_join
 def _format_iter(data):
     # make a nice text string from iter
     data = list(data)
@@ -94,6 +95,7 @@ ALLOWED_MIN_CHUNK_SIZE = 0
 DEFAULT_PREFILTER_CLASSES = {"strand", "adapter"}
 
 
+# TODO: Unnecessary (object)
 class ReadUntilClient(object):
     """
     A basic Read Until client. The class handles basic interaction
@@ -187,7 +189,6 @@ class ReadUntilClient(object):
                 self.grpc_port,
             )
             raise
-
         self.logger.info("Got rpc connection.")
         self.acquisition_service = acquisition_pb2_grpc.AcquisitionServiceStub(
             self.channel
@@ -214,6 +215,7 @@ class ReadUntilClient(object):
         )
 
         self.logger.warning("Using pre-defined read classification map.")
+        # FIXME: CLASS_MAP should be re-implemented in minknow_api?
         class_map = CLASS_MAP
         self.read_classes = {
             int(k): v for k, v in class_map["read_classification_map"].items()

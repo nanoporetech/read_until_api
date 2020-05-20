@@ -12,7 +12,7 @@ check.version:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install -r requirements.txt
+    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
     - python setup.py install
     - ru_version=$( python -c "import read_until; print(read_until.__version__)" 2>&1 )
     - tag_version="${CI_BUILD_REF_NAME/#v/}"
@@ -33,7 +33,7 @@ check.pylint:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install -r requirements.txt
+    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
     - pip install -r dev-requirements.txt
     - python setup.py install
     - ignore_pattern=".*pb2.*"
@@ -48,7 +48,7 @@ check.pylint:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install -r requirements.txt
+    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
     - pip install -r dev-requirements.txt
     - python setup.py develop
     - pytest --cov=read_until --cov-report html:cov_html --cov-report term --junitxml=./junit.xml 
@@ -78,7 +78,7 @@ build_wheel:
   stage: package
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install -r requirements.txt
+    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
     - python setup.py bdist_wheel
   artifacts:
     paths:

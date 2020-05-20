@@ -4,7 +4,7 @@ import numpy
 import pytest
 
 import read_until
-from read_until.minknow_grpc_api import data_pb2
+from minknow_api import data_pb2
 
 from read_until_test_server import ReadUntilTestServer
 from test_utils import wait_until

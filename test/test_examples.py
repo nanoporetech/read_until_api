@@ -10,7 +10,7 @@ import numpy
 
 import read_until.examples.simple
 
-from read_until.minknow_grpc_api import data_pb2
+from minknow_api import data_pb2
 
 from read_until_test_server import ReadUntilTestServer
 
