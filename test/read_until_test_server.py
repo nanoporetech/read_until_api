@@ -206,6 +206,11 @@ class ReadUntilTestServer:
             self.acquisition_service, self.server
         )
 
+        self.analysis_configuraion_service = AnalysisConfigurationService()
+        analysis_configuration_pb2_grpc.add_AnalysisConfigurationServiceServicer_to_server(
+            self.analysis_configuraion_service, self.server
+        )
+
         LOGGER.info("Starting server. Listening on port %s.", self.port)
         self.server.add_insecure_port("[::]:%s" % self.port)
         self.server.start()

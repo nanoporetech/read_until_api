@@ -14,6 +14,7 @@ import numpy
 from minknow_api import (
     acquisition_pb2,
     acquisition_pb2_grpc,
+    analysis_configuration_pb2,
     analysis_configuration_pb2_grpc,
     data_pb2,
     data_pb2_grpc,
@@ -63,19 +64,14 @@ def _numpy_type(desc):
     return numpy.dtype(type_desc)
 
 
-# TODO: replace with nice_join
-def _format_iter(data):
-    # make a nice text string from iter
-    data = list(data)
-    result = ""
-    if len(data) == 1:
-        result = data[0]
-    elif len(data) == 2:
-        result = " and ".join(data)
+def nice_join(seq, sep=", ", conjunction="or"):
+    """Join a sequence nicely"""
+    seq = [str(x) for x in seq]
+
+    if len(seq) <= 1 or conjunction is None:
+        return sep.join(seq)
     else:
-        result = ", ".join(data[:-1])
-        result += ", and {}".format(data[-1])
-    return result
+        return "{} {} {}".format(sep.join(seq[:-1]), conjunction, seq[-1])
 
 
 # Helper to generate new thread names
@@ -198,6 +194,15 @@ class ReadUntilClient(object):
             self.channel
         )
 
+        self.classes = self.analysis_configuration_service.get_read_classifications(
+            analysis_configuration_pb2.GetReadClassificationsRequest()
+        )
+
+        # https://developers.google.com/protocol-buffers/docs/reference/python-generated#map-fields
+        self.read_classes = {
+            key: self.classes.read_classifications[key] for key in self.classes.read_classifications
+        }
+
         client_type = "single chunk" if self.one_chunk else "many chunk"
         filter_to = "without prefilter"
         if self.filter_strands:
@@ -205,7 +210,7 @@ class ReadUntilClient(object):
                 self.prefilter_classes = DEFAULT_PREFILTER_CLASSES
             if not isinstance(self.prefilter_classes, set):
                 raise ValueError("Read filtering set but invalid filter classes given.")
-            classes = _format_iter(self.prefilter_classes)
+            classes = nice_join(self.prefilter_classes, conjunction="and")
             filter_to = "filtering to {} read chunks".format(classes)
         self.logger.info(
             "Creating %s client with %s data queue %s.",
