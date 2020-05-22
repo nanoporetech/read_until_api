@@ -24,13 +24,16 @@ def test_example_simple():
         read_until.examples.simple.main(
             ["--host", "localhost", "--port", str(test_server.port), "--run_time", "30"]
         )
-
     run_thread = Thread(target=example_main, args=(test_server,))
     run_thread.start()
 
     read_number = 1
     sample_number = 0
 
+    # Create ReadData objects that populate a queue in the ReadUntilTestServer,
+    #   specifically ReadUntilTestServer.data_service.live_reads_responses_to_send.
+    #   This queue of objects is simultaneously being consumed the run_thread which
+    #   is running the simple read until example.
     channel_count = 512
     read_count = channel_count
     for channel in range(channel_count):
