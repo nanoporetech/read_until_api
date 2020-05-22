@@ -23,30 +23,6 @@ from read_until.read_cache import ReadCache
 
 __all__ = ["ReadUntilClient"]
 
-# This replaces the results of an old call to MinKNOWs
-# jsonRPC interface. That interface does not respond
-# correctly when a run has been configured using the
-# newer gRPC interace. This information is not currently
-# available with the gRPC interface so as a temporary
-# measure we list a standard set of values here.
-CLASS_MAP = {
-    "read_classification_map": {
-        "83": "strand",
-        "67": "strand1",
-        "77": "multiple",
-        "90": "zero",
-        "65": "adapter",
-        "66": "mux_uncertain",
-        "70": "user2",
-        "68": "user1",
-        "69": "event",
-        "80": "pore",
-        "85": "unavailable",
-        "84": "transition",
-        "78": "unclassed",
-    }
-}
-
 
 def _numpy_type(desc):
     """Convert a description of a type provided by the data.get_data_types() RPC into a numpy dtype
@@ -198,9 +174,9 @@ class ReadUntilClient(object):
             analysis_configuration_pb2.GetReadClassificationsRequest()
         )
 
-        # https://developers.google.com/protocol-buffers/docs/reference/python-generated#map-fields
         self.read_classes = {
-            key: self.classes.read_classifications[key] for key in self.classes.read_classifications
+            key: self.classes.read_classifications[key]
+            for key in self.classes.read_classifications
         }
 
         client_type = "single chunk" if self.one_chunk else "many chunk"
@@ -219,12 +195,6 @@ class ReadUntilClient(object):
             filter_to,
         )
 
-        self.logger.warning("Using pre-defined read classification map.")
-        # FIXME: CLASS_MAP should be re-implemented in minknow_api?
-        class_map = CLASS_MAP
-        self.read_classes = {
-            int(k): v for k, v in class_map["read_classification_map"].items()
-        }
         self.strand_classes = set()
         for key, value in self.read_classes.items():
             if value in self.prefilter_classes:
