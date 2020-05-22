@@ -16,11 +16,41 @@ import grpc
 from minknow_api import (
     acquisition_pb2,
     acquisition_pb2_grpc,
+    analysis_configuration_pb2,
+    analysis_configuration_pb2_grpc,
     data_pb2,
     data_pb2_grpc,
 )
 
 LOGGER = logging.getLogger(__name__)
+CLASS_MAP = {
+    83: "strand",
+    67: "strand1",
+    77: "multiple",
+    90: "zero",
+    65: "adapter",
+    66: "mux_uncertain",
+    70: "user2",
+    68: "user1",
+    69: "event",
+    80: "pore",
+    85: "unavailable",
+    84: "transition",
+    78: "unclassed",
+}
+
+
+class AnalysisConfigurationService(
+    analysis_configuration_pb2_grpc.AnalysisConfigurationServiceServicer
+):
+    """Test server implementation of AnalysisConfigurationService
+    """
+
+    def get_read_classifications(self, request, context):
+        """Mimic get read classifications, for now return hard-coded CLASS_MAP"""
+        return analysis_configuration_pb2.GetReadClassificationsResponse(
+            read_classifications=CLASS_MAP,
+        )
 
 
 class DataService(data_pb2_grpc.DataServiceServicer):
