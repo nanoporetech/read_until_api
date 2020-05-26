@@ -20,6 +20,7 @@ from minknow_api import (
     analysis_configuration_pb2_grpc,
     data_pb2,
     data_pb2_grpc,
+    mock_server,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -45,7 +46,6 @@ class AnalysisConfigurationService(
 ):
     """Test server implementation of AnalysisConfigurationService
     """
-
     def get_read_classifications(self, request, context):
         """Mimic get read classifications, for now return hard-coded CLASS_MAP"""
         return analysis_configuration_pb2.GetReadClassificationsResponse(
@@ -54,8 +54,7 @@ class AnalysisConfigurationService(
 
 
 class DataService(data_pb2_grpc.DataServiceServicer):
-    """
-    Test server implementation of DataService.
+    """Test server implementation of DataService.
 
     Contains useful methods for testing responses to get_live_reads
     """
@@ -187,37 +186,22 @@ def get_free_network_port() -> int:
         return temp_socket.getsockname()[1]
 
 
-class ReadUntilTestServer:
-    """
-    Test server runs grpc read until service on a port.
-    """
-
-    def __init__(self, port=None):
-        self.port = port
-        if not self.port:
-            self.port = get_free_network_port()
-        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-
-        self.data_service = DataService()
-        data_pb2_grpc.add_DataServiceServicer_to_server(self.data_service, self.server)
-
-        self.acquisition_service = AcquisitionService()
-        acquisition_pb2_grpc.add_AcquisitionServiceServicer_to_server(
-            self.acquisition_service, self.server
+class ReadUntilTestServer(mock_server.MockMinKNOWServer):
+    def __init__(
+            self,
+            port=0,
+            data_service=DataService,
+            acquisition_service=AcquisitionService,
+            analysis_configuration_service=AnalysisConfigurationService,
+            **kwargs,
+    ):
+        super().__init__(
+            port,
+            data_service=data_service,
+            acquisition_service=acquisition_service,
+            analysis_configuration_service=analysis_configuration_service,
+            **kwargs,
         )
-
-        self.analysis_configuraion_service = AnalysisConfigurationService()
-        analysis_configuration_pb2_grpc.add_AnalysisConfigurationServiceServicer_to_server(
-            self.analysis_configuraion_service, self.server
-        )
-
-        LOGGER.info("Starting server. Listening on port %s.", self.port)
-        self.server.add_insecure_port("[::]:%s" % self.port)
-        self.server.start()
-
-    def stop(self):
-        """Stop grpc server"""
-        self.server.stop(0)
 
 
 def main():
@@ -265,10 +249,10 @@ def main():
     server.data_service.add_response(data_pb2.GetLiveReadsResponse())
 
     try:
-        while True:
-            time.sleep(86400)
+        with server as TestServer:
+            TestServer.wait_for_termination(86400)
     except KeyboardInterrupt:
-        server.stop()
+        pass
 
     LOGGER.info("Server exited.")
 

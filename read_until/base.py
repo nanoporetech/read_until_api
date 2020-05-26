@@ -12,12 +12,8 @@ import grpc
 import numpy
 
 from minknow_api import (
-    acquisition_pb2,
-    acquisition_pb2_grpc,
-    analysis_configuration_pb2,
-    analysis_configuration_pb2_grpc,
     data_pb2,
-    data_pb2_grpc,
+    Connection
 )
 from read_until.read_cache import ReadCache
 
@@ -148,36 +144,21 @@ class ReadUntilClient(object):
         self.prefilter_classes = prefilter_classes
 
         try:
-            self.grpc_port = self.mk_grpc_port
-            self.logger.info("Creating rpc connection on port %s.", self.grpc_port)
-            self.channel = grpc.insecure_channel(
-                "%s:%s" % (self.mk_host, self.grpc_port)
-            )
-            grpc.channel_ready_future(self.channel).result(timeout=10)
+            self.connection = Connection(self.mk_grpc_port)
         except:
+            # FIXME: Broad exception
             logging.error(
                 "Failed to connect to read until at %s: %s",
                 self.mk_host,
-                self.grpc_port,
+                self.mk_grpc_port,
             )
             raise
         self.logger.info("Got rpc connection.")
-        self.acquisition_service = acquisition_pb2_grpc.AcquisitionServiceStub(
-            self.channel
-        )
-        self.data_service = data_pb2_grpc.DataServiceStub(self.channel)
-        self.analysis_configuration_service = analysis_configuration_pb2_grpc.AnalysisConfigurationServiceStub(
-            self.channel
-        )
 
-        self.classes = self.analysis_configuration_service.get_read_classifications(
-            analysis_configuration_pb2.GetReadClassificationsRequest()
-        )
+        # Get read classifications
+        self.classes = self.connection.analysis_configuration.get_read_classifications(
+        ).read_classifications
 
-        self.read_classes = {
-            key: self.classes.read_classifications[key]
-            for key in self.classes.read_classifications
-        }
 
         client_type = "single chunk" if self.one_chunk else "many chunk"
         filter_to = "without prefilter"
@@ -195,16 +176,15 @@ class ReadUntilClient(object):
             filter_to,
         )
 
-        self.strand_classes = set()
-        for key, value in self.read_classes.items():
-            if value in self.prefilter_classes:
-                self.strand_classes.add(key)
+        self.strand_classes = set(
+            k for k in self.classes
+            if self.classes[k] in self.prefilter_classes
+        )
+
         self.logger.debug("Strand-like classes are %s.", self.strand_classes)
 
         self.signal_dtype = _numpy_type(
-            self.data_service.get_data_types(
-                data_pb2.GetDataTypesRequest()
-            ).calibrated_signal
+            self.connection.data.get_data_types().calibrated_signal
         )
 
         # setup the queues and running status
@@ -262,9 +242,7 @@ class ReadUntilClient(object):
         :returns: a structure with attributes .acquired and .processed.
 
         """
-        return self.acquisition_service.get_progress(
-            acquisition_pb2.GetProgressRequest()
-        ).raw_per_channel
+        return self.connection.acquisition.get_progress().raw_per_channel
 
     @property
     def queue_length(self):
@@ -326,7 +304,7 @@ class ReadUntilClient(object):
         #    thereby controls the lifetime of the stream. ._runner() as
         #    implemented below initialises the stream then transfers
         #    action requests from the action_queue to the stream.
-        reads = self.data_service.get_live_reads(self._runner(**kwargs))
+        reads = self.connection.data.get_live_reads(self._runner(**kwargs))
 
         # ._process_reads() as implemented below is responsible for
         #    placing action requests on the queue and logging the responses.

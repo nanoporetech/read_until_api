@@ -14,23 +14,26 @@ def test_bad_setup():
     """Test setup fails correctly with bad input"""
     test_server = ReadUntilTestServer()
 
-    # Bad port
-    with pytest.raises(Exception):
-        read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port + 1)
+    with test_server:
+        # Bad port
+        with pytest.raises(Exception):
+            read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port + 1)
 
-    # Bad prefilter_classes input
-    with pytest.raises(ValueError):
-        read_until.ReadUntilClient(
-            mk_host="localhost",
-            mk_port=test_server.port,
-            filter_strands=True,
-            prefilter_classes=4,
-        )
+        # Bad prefilter_classes input
+        with pytest.raises(ValueError):
+            read_until.ReadUntilClient(
+                mk_host="localhost",
+                mk_port=test_server.port,
+                filter_strands=True,
+                prefilter_classes=4,
+            )
+
 
 
 def test_setup():
     """Test client setup messages"""
     test_server = ReadUntilTestServer()
+    test_server.start()
     client = read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port)
 
     try:
@@ -43,6 +46,7 @@ def test_setup():
 
     finally:
         client.reset()
+        test_server.stop(0)
 
 
 def test_response():
@@ -61,6 +65,7 @@ def test_response():
     )
 
     test_server = ReadUntilTestServer()
+    test_server.start()
     test_server.data_service.add_response(
         data_pb2.GetLiveReadsResponse(channels={input_channel: input_read_response})
     )
@@ -92,3 +97,4 @@ def test_response():
         client.reset()
 
     assert test_server.data_service.find_response_times()[0] < 0.05  # 50ms round trip
+    test_server.stop(0)
