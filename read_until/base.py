@@ -11,10 +11,7 @@ from threading import Event, Thread
 import grpc
 import numpy
 
-from minknow_api import (
-    data_pb2,
-    Connection
-)
+from minknow_api import data_pb2, Connection
 from read_until.read_cache import ReadCache
 
 __all__ = ["ReadUntilClient"]
@@ -156,9 +153,9 @@ class ReadUntilClient(object):
         self.logger.info("Got rpc connection.")
 
         # Get read classifications
-        self.classes = self.connection.analysis_configuration.get_read_classifications(
-        ).read_classifications
-
+        self.classes = (
+            self.connection.analysis_configuration.get_read_classifications().read_classifications
+        )
 
         client_type = "single chunk" if self.one_chunk else "many chunk"
         filter_to = "without prefilter"
@@ -177,8 +174,7 @@ class ReadUntilClient(object):
         )
 
         self.strand_classes = set(
-            k for k in self.classes
-            if self.classes[k] in self.prefilter_classes
+            k for k in self.classes if self.classes[k] in self.prefilter_classes
         )
 
         self.logger.debug("Strand-like classes are %s.", self.strand_classes)
