@@ -20,8 +20,9 @@ from minknow_api import (
     analysis_configuration_pb2_grpc,
     data_pb2,
     data_pb2_grpc,
-    mock_server,
 )
+from minknow_api.testutils import MockMinKNOWServer
+
 
 LOGGER = logging.getLogger(__name__)
 CLASS_MAP = {
@@ -186,22 +187,16 @@ def get_free_network_port() -> int:
         return temp_socket.getsockname()[1]
 
 
-class ReadUntilTestServer(mock_server.MockMinKNOWServer):
-    def __init__(
-            self,
-            port=0,
-            data_service=DataService,
+class ReadUntilTestServer(MockMinKNOWServer):
+    def __init__(self, port=0, **kwargs):
+        # Use default Services from here but allow overriding
+        defaults = dict(
             acquisition_service=AcquisitionService,
             analysis_configuration_service=AnalysisConfigurationService,
-            **kwargs,
-    ):
-        super().__init__(
-            port,
-            data_service=data_service,
-            acquisition_service=acquisition_service,
-            analysis_configuration_service=analysis_configuration_service,
-            **kwargs,
+            data_service=DataService,
         )
+        kwargs = {**defaults, **kwargs}
+        super().__init__(port, **kwargs)
 
 
 def main():
