@@ -8,7 +8,6 @@ from collections import Counter, defaultdict
 from itertools import count as _count
 from threading import Event, Thread
 
-import grpc
 import numpy
 
 from minknow_api import data_pb2, Connection
