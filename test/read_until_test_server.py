@@ -13,19 +13,49 @@ import time
 import typing
 
 import grpc
-from read_until.minknow_grpc_api import (
+from minknow_api import (
     acquisition_pb2,
     acquisition_pb2_grpc,
+    analysis_configuration_pb2,
+    analysis_configuration_pb2_grpc,
     data_pb2,
     data_pb2_grpc,
 )
+from minknow_api.testutils import MockMinKNOWServer
+
 
 LOGGER = logging.getLogger(__name__)
+CLASS_MAP = {
+    83: "strand",
+    67: "strand1",
+    77: "multiple",
+    90: "zero",
+    65: "adapter",
+    66: "mux_uncertain",
+    70: "user2",
+    68: "user1",
+    69: "event",
+    80: "pore",
+    85: "unavailable",
+    84: "transition",
+    78: "unclassed",
+}
+
+
+class AnalysisConfigurationService(
+    analysis_configuration_pb2_grpc.AnalysisConfigurationServiceServicer
+):
+    """Test server implementation of AnalysisConfigurationService
+    """
+    def get_read_classifications(self, request, context):
+        """Mimic get read classifications, for now return hard-coded CLASS_MAP"""
+        return analysis_configuration_pb2.GetReadClassificationsResponse(
+            read_classifications=CLASS_MAP,
+        )
 
 
 class DataService(data_pb2_grpc.DataServiceServicer):
-    """
-    Test server implementation of DataService.
+    """Test server implementation of DataService.
 
     Contains useful methods for testing responses to get_live_reads
     """
@@ -157,32 +187,16 @@ def get_free_network_port() -> int:
         return temp_socket.getsockname()[1]
 
 
-class ReadUntilTestServer:
-    """
-    Test server runs grpc read until service on a port.
-    """
-
-    def __init__(self, port=None):
-        self.port = port
-        if not self.port:
-            self.port = get_free_network_port()
-        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-
-        self.data_service = DataService()
-        data_pb2_grpc.add_DataServiceServicer_to_server(self.data_service, self.server)
-
-        self.acquisition_service = AcquisitionService()
-        acquisition_pb2_grpc.add_AcquisitionServiceServicer_to_server(
-            self.acquisition_service, self.server
+class ReadUntilTestServer(MockMinKNOWServer):
+    def __init__(self, port=0, **kwargs):
+        # Use default Services from here but allow overriding
+        defaults = dict(
+            acquisition_service=AcquisitionService,
+            analysis_configuration_service=AnalysisConfigurationService,
+            data_service=DataService,
         )
-
-        LOGGER.info("Starting server. Listening on port %s.", self.port)
-        self.server.add_insecure_port("[::]:%s" % self.port)
-        self.server.start()
-
-    def stop(self):
-        """Stop grpc server"""
-        self.server.stop(0)
+        kwargs = {**defaults, **kwargs}
+        super().__init__(port, **kwargs)
 
 
 def main():
@@ -230,10 +244,10 @@ def main():
     server.data_service.add_response(data_pb2.GetLiveReadsResponse())
 
     try:
-        while True:
-            time.sleep(86400)
+        with server as TestServer:
+            TestServer.wait_for_termination(86400)
     except KeyboardInterrupt:
-        server.stop()
+        pass
 
     LOGGER.info("Server exited.")
 

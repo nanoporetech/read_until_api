@@ -10,7 +10,7 @@ import numpy
 
 import read_until.examples.simple
 
-from read_until.minknow_grpc_api import data_pb2
+from minknow_api import data_pb2
 
 from read_until_test_server import ReadUntilTestServer
 
@@ -19,18 +19,21 @@ def test_example_simple():
     """Test simple example runs and produces actions on all reads"""
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
     test_server = ReadUntilTestServer()
-
+    test_server.start()
     def example_main(test_server):
         read_until.examples.simple.main(
             ["--host", "localhost", "--port", str(test_server.port), "--run_time", "30"]
         )
-
     run_thread = Thread(target=example_main, args=(test_server,))
     run_thread.start()
 
     read_number = 1
     sample_number = 0
 
+    # Create ReadData objects that populate a queue in the ReadUntilTestServer,
+    #   specifically ReadUntilTestServer.data_service.live_reads_responses_to_send.
+    #   This queue of objects is simultaneously consumed by the run_thread which is
+    #   running the simple read until example.
     channel_count = 512
     read_count = channel_count
     for channel in range(channel_count):
@@ -77,13 +80,14 @@ def test_example_simple():
     logging.info("Stops: %s, Unblocks: %s", stop_count, unblock_count)
     assert unblock_count == read_count
     assert stop_count == read_count
+    test_server.stop(0)
 
 
 def test_example_simple_random():
     """Test simple example runs and produces actions on all reads"""
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
     test_server = ReadUntilTestServer()
-
+    test_server.start()
     def example_main(test_server):
         read_until.examples.simple.main(
             ["--host", "localhost", "--port", str(test_server.port), "--run_time", "60"]
@@ -160,6 +164,7 @@ def test_example_simple_random():
 
     assert pct50_resp_time < 0.2
     assert pct90_resp_time < 1
+    test_server.stop(0)
 
 
 if __name__ == "__main__":

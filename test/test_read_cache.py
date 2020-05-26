@@ -10,7 +10,7 @@ import pytest
 import numpy
 
 from read_until.read_cache import AccumulatingCache, ReadCache
-from read_until.generated.minknow.rpc import data_pb2
+from minknow_api import data_pb2
 
 
 def generate_read(**kwargs):

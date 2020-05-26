@@ -8,43 +8,12 @@ from collections import Counter, defaultdict
 from itertools import count as _count
 from threading import Event, Thread
 
-import grpc
 import numpy
 
-from read_until.minknow_grpc_api import (
-    acquisition_pb2,
-    acquisition_pb2_grpc,
-    analysis_configuration_pb2_grpc,
-    data_pb2,
-    data_pb2_grpc,
-)
+from minknow_api import data_pb2, Connection
 from read_until.read_cache import ReadCache
 
 __all__ = ["ReadUntilClient"]
-
-# This replaces the results of an old call to MinKNOWs
-# jsonRPC interface. That interface does not respond
-# correctly when a run has been configured using the
-# newer gRPC interace. This information is not currently
-# available with the gRPC interface so as a temporary
-# measure we list a standard set of values here.
-CLASS_MAP = {
-    "read_classification_map": {
-        "83": "strand",
-        "67": "strand1",
-        "77": "multiple",
-        "90": "zero",
-        "65": "adapter",
-        "66": "mux_uncertain",
-        "70": "user2",
-        "68": "user1",
-        "69": "event",
-        "80": "pore",
-        "85": "unavailable",
-        "84": "transition",
-        "78": "unclassed",
-    }
-}
 
 
 def _numpy_type(desc):
@@ -63,18 +32,14 @@ def _numpy_type(desc):
     return numpy.dtype(type_desc)
 
 
-def _format_iter(data):
-    # make a nice text string from iter
-    data = list(data)
-    result = ""
-    if len(data) == 1:
-        result = data[0]
-    elif len(data) == 2:
-        result = " and ".join(data)
+def nice_join(seq, sep=", ", conjunction="or"):
+    """Join a sequence nicely"""
+    seq = [str(x) for x in seq]
+
+    if len(seq) <= 1 or conjunction is None:
+        return sep.join(seq)
     else:
-        result = ", ".join(data[:-1])
-        result += ", and {}".format(data[-1])
-    return result
+        return "{} {} {}".format(sep.join(seq[:-1]), conjunction, seq[-1])
 
 
 # Helper to generate new thread names
@@ -94,6 +59,7 @@ ALLOWED_MIN_CHUNK_SIZE = 0
 DEFAULT_PREFILTER_CLASSES = {"strand", "adapter"}
 
 
+# TODO: Unnecessary (object)
 class ReadUntilClient(object):
     """
     A basic Read Until client. The class handles basic interaction
@@ -174,27 +140,20 @@ class ReadUntilClient(object):
         self.prefilter_classes = prefilter_classes
 
         try:
-            self.grpc_port = self.mk_grpc_port
-            self.logger.info("Creating rpc connection on port %s.", self.grpc_port)
-            self.channel = grpc.insecure_channel(
-                "%s:%s" % (self.mk_host, self.grpc_port)
-            )
-            grpc.channel_ready_future(self.channel).result(timeout=10)
+            self.connection = Connection(self.mk_grpc_port)
         except:
+            # FIXME: Broad exception
             logging.error(
                 "Failed to connect to read until at %s: %s",
                 self.mk_host,
-                self.grpc_port,
+                self.mk_grpc_port,
             )
             raise
-
         self.logger.info("Got rpc connection.")
-        self.acquisition_service = acquisition_pb2_grpc.AcquisitionServiceStub(
-            self.channel
-        )
-        self.data_service = data_pb2_grpc.DataServiceStub(self.channel)
-        self.analysis_configuration_service = analysis_configuration_pb2_grpc.AnalysisConfigurationServiceStub(
-            self.channel
+
+        # Get read classifications
+        self.classes = (
+            self.connection.analysis_configuration.get_read_classifications().read_classifications
         )
 
         client_type = "single chunk" if self.one_chunk else "many chunk"
@@ -204,7 +163,7 @@ class ReadUntilClient(object):
                 self.prefilter_classes = DEFAULT_PREFILTER_CLASSES
             if not isinstance(self.prefilter_classes, set):
                 raise ValueError("Read filtering set but invalid filter classes given.")
-            classes = _format_iter(self.prefilter_classes)
+            classes = nice_join(self.prefilter_classes, conjunction="and")
             filter_to = "filtering to {} read chunks".format(classes)
         self.logger.info(
             "Creating %s client with %s data queue %s.",
@@ -213,21 +172,14 @@ class ReadUntilClient(object):
             filter_to,
         )
 
-        self.logger.warning("Using pre-defined read classification map.")
-        class_map = CLASS_MAP
-        self.read_classes = {
-            int(k): v for k, v in class_map["read_classification_map"].items()
-        }
-        self.strand_classes = set()
-        for key, value in self.read_classes.items():
-            if value in self.prefilter_classes:
-                self.strand_classes.add(key)
+        self.strand_classes = set(
+            k for k in self.classes if self.classes[k] in self.prefilter_classes
+        )
+
         self.logger.debug("Strand-like classes are %s.", self.strand_classes)
 
         self.signal_dtype = _numpy_type(
-            self.data_service.get_data_types(
-                data_pb2.GetDataTypesRequest()
-            ).calibrated_signal
+            self.connection.data.get_data_types().calibrated_signal
         )
 
         # setup the queues and running status
@@ -285,9 +237,7 @@ class ReadUntilClient(object):
         :returns: a structure with attributes .acquired and .processed.
 
         """
-        return self.acquisition_service.get_progress(
-            acquisition_pb2.GetProgressRequest()
-        ).raw_per_channel
+        return self.connection.acquisition.get_progress().raw_per_channel
 
     @property
     def queue_length(self):
@@ -349,7 +299,7 @@ class ReadUntilClient(object):
         #    thereby controls the lifetime of the stream. ._runner() as
         #    implemented below initialises the stream then transfers
         #    action requests from the action_queue to the stream.
-        reads = self.data_service.get_live_reads(self._runner(**kwargs))
+        reads = self.connection.data.get_live_reads(self._runner(**kwargs))
 
         # ._process_reads() as implemented below is responsible for
         #    placing action requests on the queue and logging the responses.
