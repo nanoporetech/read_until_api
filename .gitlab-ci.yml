@@ -15,8 +15,8 @@ check.version:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install --extra-index-url \
-        https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple \
+    - pip install --extra-index-url
+        https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple
         --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
     - python setup.py install
     - ru_version=$( python -c "import read_until; print(read_until.__version__)" 2>&1 )
@@ -38,8 +38,8 @@ check.pylint:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install --extra-index-url \
-        https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple \
+    - pip install --extra-index-url
+        https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple
         --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
     - pip install -r dev-requirements.txt
     - python setup.py install
@@ -55,10 +55,10 @@ check.docs:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install --extra-index-url \
-        https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple \
+    - pip install --extra-index-url
+        https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple
         --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
-    - pip install --extra-index-url \
+    - pip install --extra-index-url
         https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple
         --trusted-host artifactory.oxfordnanolabs.local ${PYGUPPY_INSTALL}
     - pip install -r dev-requirements.txt
