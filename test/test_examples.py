@@ -12,7 +12,7 @@ import read_until.examples.simple
 
 from minknow_api import data_pb2
 
-from read_until_test_server import ReadUntilTestServer
+from .read_until_test_server import ReadUntilTestServer
 
 
 def test_example_simple():
@@ -20,10 +20,12 @@ def test_example_simple():
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
     test_server = ReadUntilTestServer()
     test_server.start()
+
     def example_main(test_server):
         read_until.examples.simple.main(
             ["--host", "localhost", "--port", str(test_server.port), "--run_time", "30"]
         )
+
     run_thread = Thread(target=example_main, args=(test_server,))
     run_thread.start()
 
@@ -88,6 +90,7 @@ def test_example_simple_random():
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
     test_server = ReadUntilTestServer()
     test_server.start()
+
     def example_main(test_server):
         read_until.examples.simple.main(
             ["--host", "localhost", "--port", str(test_server.port), "--run_time", "60"]

@@ -1,415 +1,360 @@
-"""Identification example to rejects reads based on alignment to reference sequence."""
+"""Simple example to read data from read until and send responses to server"""
 
-from collections import defaultdict, Counter
+import argparse
 import functools
 import logging
-import os
-import random
 import time
-import typing
-from uuid import uuid4
+from collections import defaultdict, Counter
 
-import numpy
+import numpy as np
 
-try:
-    import mappy
-    import scrappy
-except ImportError:
-    raise ImportError(
-        "'mappy' and 'scrappy' must be installed to use this functionality."
+from read_until import AccumulatingCache, ReadUntilClient
+from pyguppy_client_lib.pyclient import PyGuppyClient
+from pyguppy_client_lib.helper_functions import package_read
+from read_until.examples.example_utils import run_workflow
+
+
+def basecall(
+    Caller: PyGuppyClient, reads: list, dtype: "np.dtype", daq_values: dict,
+):
+    """Generator that sends and receives data from guppy
+
+    :param caller: pyguppy_client_lib.pyclient.PyGuppyClient
+    :param reads: List of reads from read_until
+    :type reads: Iterable
+    :param dtype:
+    :param daq_values:
+
+    :returns:
+        - read_info (:py:class:`tuple`) - channel (int), read number (int)
+        - read_data (:py:class:`dict`) - Data returned from Guppy
+    :rtype: Iterator[tuple[tuple, dict]]
+    """
+
+    # with Caller as caller:
+    caller = Caller
+    done = 0
+    hold = {}
+    sent = 0
+
+    for channel, read in reads:
+        hold[read.id] = (channel, read.number)
+        t0 = time.time()
+        success = caller.pass_read(
+            package_read(
+                read_id=read.id,
+                raw_data=np.frombuffer(read.raw_data, dtype),
+                daq_offset=daq_values[channel].offset,
+                daq_scaling=daq_values[channel].scaling,
+            )
+        )
+        if not success:
+            logging.warning("Skipped a read: {}".format(read.id))
+            hold.pop(read.id)
+            continue
+
+        t = time.time() - t0
+        # 1/100th second
+        if t < caller.throttle:
+            time.sleep(caller.throttle - t)
+        sent += 1
+
+    while done < sent:
+        t0 = time.time()
+        results = caller.get_completed_reads()
+
+        if not results:
+            time.sleep(caller.throttle)
+
+        for read in results:
+            yield hold.pop(read["metadata"]["read_id"]), read
+            done += 1
+            t = time.time() - t0
+            if t < caller.throttle:
+                time.sleep(caller.throttle - t)
+
+
+def get_parser():
+    """Build argument parser for example"""
+    parser = argparse.ArgumentParser(
+        prog="Enrichment/Depletion demo ({})".format(__file__),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--enrich",
+        help="Enrich targets in the index or, if specified, the bed file",
+        action="store_true",
+    )
+    group.add_argument(
+        "--deplete",
+        help="Deplete targets in the index or, if specified, the bed file",
+        action="store_true",
     )
 
-import read_until
-import read_until.examples.simple as read_until_extras
+    parser.add_argument("--alignment-index-file", type=str, required=True)
+    parser.add_argument("--bed-file", type=str, default="")
+
+    parser.add_argument(
+        "--host", default="127.0.0.1", help="MinKNOW server host address"
+    )
+    parser.add_argument(
+        "--port", type=int, default=8000, help="MinKNOW gRPC server port"
+    )
+
+    parser.add_argument(
+        "--guppy-host",
+        default="127.0.0.1",
+        help="Guppy server host address",
+        # required=True,
+    )
+    parser.add_argument(
+        "--guppy-port", type=int, default=5555, help="Guppy server port", required=True,
+    )
+    parser.add_argument(
+        "--guppy-config",
+        default="dna_r9.4.1_450bps_fast",
+        help="Guppy server config",
+        # required=True,
+    )
+
+    parser.add_argument("--workers", default=1, type=int, help="worker threads")
+    parser.add_argument(
+        "--analysis_delay",
+        type=int,
+        default=0,
+        help="Period to wait before starting analysis",
+    )
+    parser.add_argument(
+        "--run_time", type=int, default=30, help="Period to run the analysis"
+    )
+    parser.add_argument(
+        "--unblock_duration",
+        type=float,
+        default=0.1,
+        help="Time (in seconds) to apply unblock voltage",
+    )
+    parser.add_argument(
+        "--one_chunk", action="store_true", help="Minimum read chunk size to receive",
+    )
+    parser.add_argument(
+        "--batch-size",
+        default=None,
+        type=int,
+        help="Number of reads to get from ReadCache each iteration. If not set uses number of channels on device",
+    )
+    parser.add_argument(
+        "--throttle",
+        default=0.1,
+        type=float,
+        help="Time to wait between requesting successive read batches from the ReadCache",
+    )
+    parser.add_argument(
+        "--min-chunks",
+        default=0,
+        type=int,
+        help="The minimum number of chunks to consider before unblocking",
+    )
+    parser.add_argument(
+        "--max-chunks",
+        default=2,
+        type=int,
+        help="The maximum number of chunks to consider before unblocking",
+    )
+    return parser
 
 
-def basecall_data(raw: numpy.ndarray) -> typing.Tuple[str, str]:
-    """Basecall raw data and return sequence and score tuple"""
-    seq, score, _pos, _start, _end, _base_probs = scrappy.basecall_raw(raw)
-    return seq, score
-
-
-def divide_analysis(
-    client: read_until.ReadUntilClient,
-    map_index: str,
-    genome_cut: int = 2200000,
-    batch_size: int = 10,
-    delay: float = 1,
+def analysis(
+    client: ReadUntilClient,
+    caller: PyGuppyClient,
+    enrich: bool,
+    deplete: bool,
+    batch_size: int,
     throttle: float = 0.1,
     unblock_duration: float = 0.1,
-) -> typing.DefaultDict[int, Counter]:
+    min_chunks: int = 0,
+    max_chunks: int = 2,
+):
     """
-    Analysis using scrappy and mappy to accept/reject reads based on
-    channel and identity as determined by alignment of basecall to
-    reference. Channels are split into three groups (by division modulo 3
-    of the channel number): the first group is left to proceed "naturally",
-    for the second (third) attempts are made to sequence only reads from
-    before (after) a reference locus.
 
     :param client: an instance of a `ReadUntilClient` object.
-    :param map_index: a minimap2 index file.
-    :param genome_cut: reference locus for determining read acceptance
-        in the two filtered channel groups.
+    :param caller: PyGuppyClient
+    :param enrich: Enrich targets in the index or bed file
+    :param deplete: Deplete targets in the index or bed file
     :param batch_size: number of reads to pull from `client` at a time.
     :param delay: number of seconds to wait before starting analysis.
     :param throttle: minimum interval between requests to `client`.
     :param unblock_duration: time in seconds to apply unblock voltage.
 
-    :returns: a dictionary of Counters of actions taken per channel group.
-
     """
     logger = logging.getLogger("Analysis")
-    logger.info("Starting analysis of reads in %ss.", delay)
-    time.sleep(delay)
+    # Get whether a bed file is in use from the pyguppy caller
+    bed_file = bool(caller.params.get("bed_file", False))
+    action = ""
 
-    logger.info("Loading index")
-    mapper = mappy.Aligner(map_index, preset="map_ont")
+    action_funcs = {
+        "stop_receiving": client.stop_receiving_read,
+        "unblock": lambda c, n: client.unblock_read(c, n, unblock_duration),
+    }
 
-    action_counters = defaultdict(Counter)
+    # Count how many times we've seen a read
+    read_counter = defaultdict(Counter)
+
     while client.is_running:
         time_begin = time.time()
-        read_batch = client.get_read_chunks(batch_size=batch_size, last=True)
-        for channel, read in read_batch:
-            channel_group = channel % 3
-            if channel_group == 0:
-                # leave these channels alone
-                logger.debug("Skipping channel %s(%s).", channel, 0)
-                action_counters[channel_group]["skipped"] += 1
-                client.stop_receiving_read(channel, read.number)
-            else:
-                # convert the read data into a numpy array of correct type
-                raw_data = numpy.frombuffer(read.raw_data, client.signal_dtype)
-                read.raw_data = bytes("", "utf8")
-                basecall, _score = basecall_data(raw_data)
-                aligns = list(mapper.map(basecall))
-                if len(aligns) == 0:
-                    # Defer decision for another time
-                    action_counters[channel_group]["unaligned"] += 1
-                    logger.debug("read_%s_%s doesn't align.", channel, read.number)
-                else:
-                    # choose a random alignment as surrugate for detecting a best
-                    align = random.choice(aligns)
-                    logger.debug(
-                        "%s:%s-%s, read_%s_%s:%s-%s, blen:%s, class:%s",
-                        align.ctg,
-                        align.r_st,
-                        align.r_en,
-                        channel,
-                        read.number,
-                        align.q_st,
-                        align.q_en,
-                        align.blen,
-                        [client.read_classes[x] for x in read.chunk_classifications],
-                    )
-                    first_half = align.r_st < genome_cut
-                    action_counters[channel_group][
-                        "section_{}".format(int(first_half))
-                    ] += 1
-                    unblock = (channel_group == 1 and first_half) or (
-                        not channel_group == 1 and not first_half
-                    )
-                    if unblock:
-                        # Bad read for channel
-                        action_counters[channel_group]["unblock"] += 1
-                        logger.debug(
-                            "Unblocking channel %s(%s) ref:%s.",
-                            channel,
-                            channel_group,
-                            align.r_st,
-                        )
-                        client.unblock_read(
-                            channel, read.number, duration=unblock_duration
-                        )
-                    else:
-                        # Good read for channel
-                        action_counters[channel_group]["stop"] += 1
-                        logger.debug(
-                            "Good channel %s(%s) ref:%s.",
-                            channel,
-                            channel_group,
-                            align.r_st,
-                        )
-                        if not client.one_chunk:
-                            client.stop_receiving_read(channel, read.number)
+        # get the most recent read chunks from the client
+        called_batch = basecall(
+            Caller=caller,
+            reads=client.get_read_chunks(batch_size=50, last=True),
+            dtype=client.signal_dtype,
+            daq_values=client.calibration_values,
+        )
 
+        i = 0
+        t0 = time.time()
+        # for (c, n), r in called_batch:
+        #     i += 1
+
+        # for channel, read in client.get_read_chunks(batch_size=batch_size, last=True):
+        for (channel, read_number), read in called_batch:
+
+            # Count the number of times a read is seen
+            if read_number not in read_counter[channel]:
+                read_counter[channel].clear()
+            read_counter[channel][read_number] += 1
+            i += 1
+
+            if enrich:
+                if bed_file:
+                    # Check for bed file associated keys
+                    hits = read.get("metadata", {}).get("alignment_bed_hits", 0)
+                    if hits > 0:
+                        # Hits in bed file
+                        client.stop_receiving_read(channel, read_number)
+                        action = "stop_receiving"
+                    else:
+                        # Probably don't want to instantly unblock if the read
+                        #   didn't hit a bed line
+                        client.unblock_read(
+                            channel, read_number, duration=unblock_duration
+                        )
+                        action = "unblock"
+                else:
+                    # No bed file, check if alignments
+                    hits = read.get("metadata", {}).get("alignment_genome", False)
+                    if hits and hits != "*":
+                        # Hits in alignment index file
+                        client.stop_receiving_read(channel, read_number)
+                        action = "stop_receiving"
+                    else:
+                        # Probably don't want to instantly unblock...
+                        client.unblock_read(channel, read_number)
+                        action = "unblock"
+            elif deplete:
+                if bed_file:
+                    # Check for bed file associated keys
+                    hits = read.get("metadata", {}).get("alignment_bed_hits", 0)
+                    if hits > 0:
+                        client.unblock_read(channel, read_number)
+                        action = "unblock"
+                    else:
+                        client.stop_receiving_read(channel, read_number)
+                        action = "stop_receiving"
+                else:
+                    # No bed file, check if alignments
+                    hits = read.get("metadata", {}).get("alignment_genome", False)
+                    if hits and hits != "*":
+                        client.unblock_read(channel, read_number)
+                        action = "unblock"
+                    else:
+                        client.stop_receiving_read(channel, read_number)
+                        action = "stop_receiving"
+            else:
+                raise ValueError("Somehow both enrich/deplete are False!")
+
+            # TODO: Evaluate the number of times a read is seen
+            #       e.g. above or below chunk thresholds before
+            #       sending unblock/stop_receiving
+            action_func = action_funcs[action]
+            action_func(channel, read_number)
+            # logger.info("{}:{}".format(action, read["metadata"]["read_id"]))
+
+        if i:
+            logger.info("{i:>3} - {t:.6f}".format(i=i, t=time.time() - t0))
+
+        # limit the rate at which we make requests
         time_end = time.time()
         if time_begin + throttle > time_end:
             time.sleep(throttle + time_begin - time_end)
 
-    # end while loop
-    logger.info("Received client stop signal.")
-
-    return action_counters
-
-
-def filter_targets(
-    client: read_until.ReadUntilClient,
-    mapper: mappy.Aligner,
-    targets,
-    batch_size: int = 10,
-    delay: float = 1,
-    throttle: float = 0.1,
-    control_group: int = 16,
-    unblock_unknown: bool = False,
-    basecalls_output: str = None,
-    unblock_duration: float = 0.1,
-) -> typing.DefaultDict[str, Counter]:
-    """
-    Analysis using scrappy and mappy to accept/reject reads based on
-    channel and identity as determined by alignment of basecall to
-    reference. Channels are split into two groups (by division modulo
-    `control_group` of the channel number): the first group is left to proceed
-    "naturally", the second rejects reads not aligning to target sequences.
-
-    :param client: an instance of a `ReadUntilClient` object.
-    :param mapper: an instance of `mappy.Aligner`.
-    :param targets: a list of acceptable reference targets (chr, start, end).
-    :param batch_size: number of reads to pull from `client` at a time.
-    :param delay: number of seconds to wait before starting analysis.
-    :param throttle: minimum interval between requests to `client`.
-    :param control_group: channels for which (channel %% control_group) == 0
-        will form the control group.
-    :param unblock_unknown: whether or not to unblock reads which cannot be
-        positively identified (i.e. show no alignment to reference whether
-        on or off target).
-    :param basecalls_output: filename prefix for writing basecalls.
-    :param unblock_duration: time in seconds to apply unblock voltage.
-
-    :returns: a dictionary of Counters of actions taken per channel group.
-
-    """
-    logger = logging.getLogger("Analysis")
-    logger.info("Starting analysis of reads in %ss.", delay)
-    time.sleep(delay)
-    thread_id = str(uuid4())
-    if basecalls_output is None:
-        basecalls_output = os.devnull
     else:
-        basecalls_output = "{}_{}.fa".format(basecalls_output, thread_id)
+        caller.disconnect()
 
-    with open(basecalls_output, "w") as fasta:
-        action_counters = defaultdict(Counter)
-        while client.is_running:
-            time_begin = time.time()
-            read_batch = client.get_read_chunks(batch_size=batch_size, last=True)
-            for channel, read in read_batch:
-                channel_group = "test" if (channel % control_group) else "control"
-                if channel_group == "control":
-                    # leave these channels alone
-                    logger.debug("Skipping channel %s(%s).", channel, 0)
-                    action_counters[channel_group]["skipped"] += 1
-                    client.stop_receiving_read(channel, read.number)
-                else:
-                    # convert the read data into a numpy array of correct type
-                    raw_data = numpy.fromstring(read.raw_data, client.signal_dtype)
-                    read.raw_data = read_until.NullRaw
-                    basecall, score = basecall_data(raw_data)
-                    aligns = list(mapper.map(basecall))
-                    fasta_action = ""
-                    if len(aligns) == 0:
-                        action_counters[channel_group]["unaligned"] += 1
-                        if unblock_unknown:
-                            logger.debug(
-                                "Unblocking unidentified channel %s:%s:%s.",
-                                channel,
-                                read.number,
-                                read.chunk_start_sample,
-                            )
-                            client.unblock_read(channel, read.number)
-                            fasta_action = "unaligned/unblocked"
-                        else:
-                            # Defer decision for another time (if client is setup
-                            #   to show us more).
-                            logger.debug(
-                                "Leaving unidentified channel %s:%s:%s",
-                                channel,
-                                read.number,
-                                read.chunk_start_sample,
-                            )
-                            fasta_action = "unaligned/left"
-                    else:
-                        # choose a random alignment as surrugate for detecting a best
-                        align = random.choice(aligns)
-                        logger.debug(
-                            "%s:%s-%s, read_%s_%s:%s-%s, blen:%s, class:%s",
-                            align.ctg,
-                            align.r_st,
-                            align.r_en,
-                            channel,
-                            read.number,
-                            align.q_st,
-                            align.q_en,
-                            align.blen,
-                            [
-                                client.read_classes[x]
-                                for x in read.chunk_classifications
-                            ],
-                        )
-                        unblock = True
-                        hit = "off_target"
-                        for target in targets:
-                            if align.ctg == target[0]:
-                                # This could be a little more permissive
-                                if (
-                                    align.r_st > target[1] and align.r_st < target[2]
-                                ) or (
-                                    align.r_en > target[1] and align.r_en < target[2]
-                                ):
-                                    unblock = False
-                                    hit = "{}:{}-{}".format(*target)
-
-                        # store on target
-                        action_counters[channel_group][hit] += 1
-                        if unblock:
-                            logger.debug(
-                                "Unblocking channel %s:%s:%s.",
-                                channel,
-                                read.number,
-                                read.chunk_start_sample,
-                            )
-                            client.unblock_read(
-                                channel, read.number, duration=unblock_duration
-                            )
-                            fasta_action = "{}/unblocked".format(hit)
-                        else:
-                            logger.debug(
-                                "Good channel %s:%s:%s, aligns to %s.",
-                                channel,
-                                read.number,
-                                read.chunk_start_sample,
-                                hit,
-                            )
-                            if not client.one_chunk:
-                                client.stop_receiving_read(channel, read.number)
-                            fasta_action = "{}/stopped".format(hit)
-                        fasta_action += " {}:{}-{}".format(
-                            align.ctg, align.r_st, align.r_en
-                        )
-
-                    fasta.write(
-                        ">{} {} {} {} {}\n{}\n".format(
-                            read.id, score, channel, read.number, fasta_action, basecall
-                        )
-                    )
-
-            time_end = time.time()
-            if time_begin + throttle > time_end:
-                time.sleep(throttle + time_begin - time_end)
-
-        # end while loop
-        logger.info("Received client stop signal.")
-
-    return action_counters
+    caller.disconnect()
+    return
 
 
 def main(argv=None):
-    """identification example main cli entrypoint"""
-    parser = read_until_extras.get_parser()
-    parser.description = "Read until with basecall-alignment filter."
-    parser.add_argument("map_index", help="minimap alignment index.")
-    parser.add_argument(
-        "--targets",
-        default=None,
-        nargs="+",
-        help="list of target regions chr:start-end.",
-    )
-    parser.add_argument(
-        "--control_group",
-        default=16,
-        type=int,
-        help="Inverse proportion of channels in control group.",
-    )
-    parser.add_argument(
-        "--unblock_unknown",
-        default=False,
-        action="store_true",
-        help="Inverse proportion of channels in control group.",
-    )
-    parser.add_argument(
-        "--basecalls_output", help="Filename prefix for on-the-fly basecalls."
-    )
-    args = parser.parse_args(argv)
+    """simple example main cli entrypoint"""
+    args = get_parser().parse_args(argv)
+
+    print(args)
 
     logging.basicConfig(
         format="[%(asctime)s - %(name)s] %(message)s",
         datefmt="%H:%M:%S",
-        level=args.log_level,
+        level=logging.INFO,
     )
-    logger = logging.getLogger("Manager")
 
-    read_until_client = read_until.ReadUntilClient(
+    read_until_client = ReadUntilClient(
         mk_host=args.host,
         mk_port=args.port,
-        one_chunk=args.one_chunk,
+        cache_type=AccumulatingCache,
+        one_chunk=False,
         filter_strands=True,
+        # Request uncalibrated, int16, signal
+        calibrated_signal=False,
     )
 
-    if args.targets is None:
-        analysis_function = functools.partial(
-            divide_analysis,
-            read_until_client,
-            args.map_index,
-            delay=args.analysis_delay,
-            unblock_duration=args.unblock_duration,
-        )
-    else:
-        logger.info("Loading index")
-        mapper = mappy.Aligner(args.map_index, preset="map_ont")
-        regions = list()
-        for target in args.targets:
-            ref, coords = target.split(":")
-            start, stop = (int(x) for x in coords.split("-"))
-            regions.append((ref, start, stop))
-        analysis_function = functools.partial(
-            filter_targets,
-            read_until_client,
-            mapper,
-            regions,
-            delay=args.analysis_delay,
-            control_group=args.control_group,
-            unblock_unknown=args.unblock_unknown,
-            basecalls_output=args.basecalls_output,
-            unblock_duration=args.unblock_duration,
-        )
+    # Handle arg cases:
+    if args.batch_size is None:
+        args.batch_size = read_until_client.channel_count
 
-    # run read until, and capture statistics
-    action_counters = read_until_extras.run_workflow(
-        read_until_client,
-        analysis_function,
-        args.workers,
-        args.run_time,
-        runner_kwargs={"min_chunk_size": args.min_chunk_size},
+    caller = PyGuppyClient(
+        address="{}:{}".format(args.guppy_host, args.guppy_port),
+        config="dna_r9.4.1_450bps_fast",
+        # daq_values=read_until_client.calibration_values,
+        # TODO: Check that provided file exists on this disk?
+        alignment_index_file=args.alignment_index_file,
+        # FIXME: A little bit hacky, need to determine exactly what the
+        #   guppy server can/cannot accept as a bed file. Bools doesn't
+        #   play too nicely and cause the alignment file to get dropped
+        bed_file=args.bed_file if args.bed_file else "",
+        # TODO: Change hardcoded timeout
+        server_file_load_timeout=180,  # 180 == 3 minutes, should be enough?
     )
 
-    # summarise statatistics
-    total_counters = defaultdict(Counter)
-    for worker_counts in action_counters:
-        if worker_counts is None:
-            logger.warning("A worker failed to return data.")
-        else:
-            all_keys = set(total_counters.keys()) | set(worker_counts.keys())
-            for key in all_keys:
-                total_counters[key] += worker_counts[key]
+    # This will block until the guppy server has loaded the model, index,
+    #   and bed file to get around this, we could init pyguppy in another
+    #   thread
+    caller.connect()
+    # caller.disconnect()
 
-    groups = list(total_counters.keys())
-    actions = set()
-    for group in groups:
-        actions |= set(total_counters[group].keys())
+    analysis_worker = functools.partial(
+        analysis,
+        client=read_until_client,
+        caller=caller,
+        enrich=args.enrich,
+        deplete=args.deplete,
+        batch_size=args.batch_size,
+        # delay=args.analysis_delay,
+        unblock_duration=args.unblock_duration,
+        min_chunks=args.min_chunks,
+        max_chunks=args.max_chunks,
+    )
 
-    msg = ["Action summary:", "\t".join(("group", "action".ljust(9), "count"))]
-    for group in groups:
-        for action in actions:
-            msg.append(
-                "\t".join(
-                    (
-                        str(x)
-                        for x in (
-                            group,
-                            str(action).ljust(9),
-                            total_counters[group][action],
-                        )
-                    )
-                )
-            )
-    msg = "\n".join(msg)
-    logger.info(msg)
+    run_workflow(read_until_client, analysis_worker, args.workers, args.run_time)
+
+
+if __name__ == "__main__":
+    main()

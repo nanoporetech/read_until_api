@@ -1,3 +1,6 @@
 pylint
 pytest
 pytest-cov
+sphinx
+sphinx_rtd_theme
+sphinx-argparse
