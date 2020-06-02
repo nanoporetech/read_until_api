@@ -53,12 +53,10 @@ check.docs:
     - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local ont-pyguppy-client-lib>=4.0.7
     - pip install -r dev-requirements.txt
     - python setup.py install
-    - cd docs
-    - sphinx-build -b html . _build/html
-    - mv _build/html html_docs
+    - sphinx-build -b html docs/ public
   artifacts:
     paths:
-      - html_docs
+      - public
 
 .test_skeleton: &test_skeleton
   stage: check
