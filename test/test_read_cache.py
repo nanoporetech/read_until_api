@@ -7,66 +7,9 @@ import threading
 import time
 
 import pytest
-import numpy
 
 from read_until.read_cache import AccumulatingCache, ReadCache
-from minknow_api import data_pb2
-
-
-def generate_read(**kwargs):
-    """Generate a (channel, ReadData) tuple, using random numbers
-
-    Other Parameters
-    ----------------
-    channel : int
-        Channel number to give the read
-    id : str
-        Read ID to give the read
-    number : int
-        Number to give the read. Two chunks with the same number and channel are
-        considered the same read.
-    start_sample : int
-    chunk_start_sample : int
-    chunk_length : int
-    chunk_classifications : List[int,]
-    raw_data : bytes
-        Raw bytes from int16 or float32
-    median_before : float
-        Drawn from random.uniform(200, 250)
-    median : float
-        Drawn from random.uniform(100, 120)
-    """
-    # If channel not in kwargs use a random int
-    if "channel" in kwargs:
-        channel = kwargs.pop("channel")
-    else:
-        # TODO: should take other flow cell sizes
-        channel = random.randint(1, 512)
-
-    sample_length = random.randint(1000, 3000)
-    sample_number = 0
-    defaults = dict(
-        id="test-read",
-        number=random.randint(1, 10000),
-        start_sample=sample_number,
-        chunk_start_sample=sample_number,
-        chunk_length=sample_length,
-        chunk_classifications=[83],
-        raw_data=numpy.random.random(sample_length).astype(dtype="f4").tobytes(),
-        median_before=random.uniform(
-            200, 250
-        ),  # guarantee > 60 pa delta - simple treats this as a read.
-        median=random.uniform(100, 120),
-    )
-
-    # remove keys we don't want
-    for key in kwargs.keys() - defaults.keys():
-        kwargs.pop(key)
-
-    # update the defaults dict with any kwargs
-    kwargs = {**defaults, **kwargs}
-
-    return channel, data_pb2.GetLiveReadsResponse.ReadData(**kwargs)
+from .test_utils import generate_read
 
 
 def test_maxsize():
@@ -364,6 +307,82 @@ def test_accumulating_setitem():
         rc.setdefault(*generate_read(channel=i))
 
     assert len(rc) == max_size
+
+
+def test_accumulating_replace():
+    max_size = 2
+    rc = AccumulatingCache(max_size)
+
+    # Add channel 1, 2, then 3 should only have 2 & 3
+    for i in range(1, 3):
+        channel, read = generate_read(channel=i)
+        rc[channel] = read
+
+    assert rc.keys() == {1, 2}
+
+    channel, read = generate_read(channel=3)
+    rc[channel] = read
+
+    assert rc.keys() == {2, 3}
+
+
+def test_accumulating_popitems():
+    max_size = 10
+    rc = AccumulatingCache(max_size)
+
+    keys = []
+    for i in range(1, max_size + 1):
+        rc.setdefault(*generate_read(channel=i))
+        keys.append(i)
+
+    n = 5
+
+    # Get the newest n items, these will be given newest -> oldest
+    #   eg [10, 9, 8, ...], the insertion order is reversed
+    lifo = [ch for ch, data in rc.popitems(5, last=True)]
+    # keys[n:][::-1] '[n:]' gets n items to the end,
+    #   '[::-1]' reverses the previous list
+    assert lifo == keys[n:][::-1]
+
+    # Get the oldest n items, just the first n items
+    fifo = [ch for ch, data in rc.popitems(n, last=False)]
+    assert fifo == keys[:n]
+
+    # Test asking for more than capacity, LIFO -> reversed keys
+    all_items = [ch for ch, data in rc.popitems(max_size + 1, last=True)]
+    assert keys[::-1] == all_items
+
+    # Test asking for more than capacity, FIFO -> insertion order
+    all_items = [ch for ch, data in rc.popitems(max_size + 1, last=False)]
+    assert keys == all_items
+
+
+def test_accumulating_attributes():
+    max_size = 10
+    rc = AccumulatingCache(max_size)
+
+    for c in range(1, max_size + 1):
+        channel, read = generate_read(channel=c, number=c)
+        rc[channel] = read
+
+    assert len(rc) == rc.size
+    assert rc.missed == 0
+    assert rc.replaced == 0
+
+    # Test replaced
+    # Refill with same channels and read numbers
+    for c in range(1, max_size + 1):
+        channel, read = generate_read(channel=c, number=c)
+        rc[channel] = read
+
+    assert rc.replaced == max_size, ".replaced is wrong"
+
+    # Test missed
+    for c in range(1, max_size + 1):
+        channel, read = generate_read(channel=c, number=c + 1)
+        rc[channel] = read
+
+    assert rc.missed == max_size, ".missed is wrong"
 
 
 def add_to_cache(cache, n=10):

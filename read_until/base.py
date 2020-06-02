@@ -1,12 +1,17 @@
-"""Core definitions for read until client"""
+"""Read Until Client core
+
+The base module provides the ``ReadUntilClient`` which is the primary
+connection point between the read_until_api and MinKNOW.
+"""
 
 import logging
 import queue
 import time
 import uuid
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, namedtuple
 from itertools import count as _count
 from threading import Event, Thread
+from typing import Set
 
 import numpy
 
@@ -42,6 +47,9 @@ def nice_join(seq, sep=", ", conjunction="or"):
         return "{} {} {}".format(sep.join(seq[:-1]), conjunction, seq[-1])
 
 
+CALIBRATION = namedtuple("calibration", "scaling offset")
+
+
 # Helper to generate new thread names
 # pylint: disable=invalid-name
 _counter = _count()
@@ -59,12 +67,32 @@ ALLOWED_MIN_CHUNK_SIZE = 0
 DEFAULT_PREFILTER_CLASSES = {"strand", "adapter"}
 
 
-# TODO: Unnecessary (object)
 class ReadUntilClient(object):
     """
     A basic Read Until client. The class handles basic interaction
     with the MinKNOW gRPC stream and provides a thread-safe queue
     containing the most recent read data on each channel.
+
+    :param mk_host: MinKNOW gRPC host address, default: ``127.0.0.1``.
+    :type mk_host:  str
+    :param mk_port: MinKNOW gRPC port for the sequencing device, default: ``8000``.
+    :type mk_port: int
+    :param cache_type: Read cache type, should be derived from `ReadCache` for
+        managing incoming read chunks, default: ``read_until.read_cache.ReadCache``.
+    :type cache_type: read_until.read_cache.ReadCache
+    :param filter_strands: pre-filter stream to keep only strand-like reads,
+        default: ``True``
+    :type filter_strands: bool
+    :param one_chunk: Attempt to receive only one chunk per read. When
+        enabled a request to stop receiving more data for a read is
+        immediately staged when the first chunk is cached, default: ``True``.
+    :type one_chunk: bool
+    :param prefilter_classes: Set of read classes to accept through
+        prefilter. Ignored if filter_strands is `False`. default: ``{'strand', 'adapter'}``
+    :type prefilter_classes: set
+    :param calibrated_signal: Bool, if True request calibrated signal (float32),
+        if False request uncalibrated signal (int16)
+    :type calibrated_signal: bool
 
     To set up and use a client:
 
@@ -77,14 +105,14 @@ class ReadUntilClient(object):
 
     The client is now recieving data and can send feedback to MinKNOW.
 
-    Calls to methods of `read_until_client` can then be made in a separate
+    Calls to methods of ``read_until_client`` can then be made in a separate
     thread. For example a continually running analysis function can be
     submitted to the executor as:
 
     >>> def analysis(client, *args, **kwargs):
     ...     while client.is_running:
     ...         for channel, read in client.get_read_chunks():
-    ...             raw_data = numpy.fromstring(read.raw_data, client.signal_dtype)
+    ...             raw_data = numpy.frombuffer(read.raw_data, client.signal_dtype)
     ...             # do something with raw data... and maybe call:
     ...             #    client.stop_receiving_read(channel, read.number)
     ...             #    client.unblock_read(channel, read.number)
@@ -102,39 +130,23 @@ class ReadUntilClient(object):
 
     def __init__(
         self,
-        mk_host="127.0.0.1",
-        mk_port=8000,
-        cache_size=512,
-        cache_type=ReadCache,
-        filter_strands=True,
-        one_chunk=True,
-        prefilter_classes=None,
+        mk_host: str = "127.0.0.1",
+        mk_port: int = 8000,
+        cache_type: ReadCache = ReadCache,
+        filter_strands: bool = True,
+        one_chunk: bool = True,
+        prefilter_classes: Set[str,] = None,
+        calibrated_signal: bool = False,
     ):
-        """
-        A basic Read Until client. The class handles basic interaction
-        with the MinKNOW gRPC stream and provides a thread-safe queue
-        containing the most recent read data on each channel.
-
-        :param mk_port: MinKNOW gRPC port for the sequencing device.
-        :param cache_size: maximum number of read chunks to cache from
-            gRPC stream. Setting this to the number of device channels
-            will allow caching of the most recent data per channel.
-        :param cache_type: a type derived from `ReadCache` for managing
-            incoming read chunks.
-        :param filter_strands: pre-filter stream to keep only strand-like reads.
-        :param one_chunk: attempt to receive only one_chunk per read. When
-            enabled a request to stop receiving more data for a read is
-            immediately staged when the first chunk is cached.
-        :param prefilter_classes: a set of read classes to accept through
-            prefilter. Ignored if filter_strands is `False`.
-        """
         self.logger = logging.getLogger("ReadUntil")
 
         self.mk_host = mk_host
         self.mk_grpc_port = mk_port
-        self.cache_size = cache_size
+
         # class type to use for caching reads
         self.CacheType = cache_type  # pylint: disable=invalid-name
+        # TODO: we could add a check here that the cache is inherited from
+        #       the base ReadCache/make sure it has the needed methods?
         self.filter_strands = filter_strands
         self.one_chunk = one_chunk
         self.prefilter_classes = prefilter_classes
@@ -151,10 +163,35 @@ class ReadUntilClient(object):
             raise
         self.logger.info("Got rpc connection.")
 
+        self.first_channel = 1
+        self.channel_count = self.connection.device.get_flow_cell_info().channel_count
+
+        # Set cache_size and last_channel to the same as the device channel count
+        self.cache_size = self.channel_count
+        self.last_channel = self.channel_count
+
         # Get read classifications
         self.classes = (
             self.connection.analysis_configuration.get_read_classifications().read_classifications
         )
+
+        # Get calibration values
+        self.calibration_data = self.connection.device.get_calibration(
+            first_channel=self.first_channel, last_channel=self.last_channel,
+        )
+        ranges = self.calibration_data.pa_ranges
+        offsets = self.calibration_data.offsets
+        digi = self.calibration_data.digitisation
+
+        # FIXME: Getting the calibration seems a little shaky should
+        #        these values be provided as a map<int CalibrationData>
+        #        or something like that?
+        # FIXME: offsets and pa_ranges size should match channel_count?
+
+        self.calibration_values = {
+            ch: CALIBRATION(rng / digi, offset)
+            for ch, (rng, offset) in enumerate(zip(ranges, offsets), start=1)
+        }
 
         client_type = "single chunk" if self.one_chunk else "many chunk"
         filter_to = "without prefilter"
@@ -178,9 +215,16 @@ class ReadUntilClient(object):
 
         self.logger.debug("Strand-like classes are %s.", self.strand_classes)
 
-        self.signal_dtype = _numpy_type(
-            self.connection.data.get_data_types().calibrated_signal
-        )
+        if calibrated_signal:
+            self.calibration = data_pb2.GetLiveReadsRequest.CALIBRATED
+            self.signal_dtype = _numpy_type(
+                self.connection.data.get_data_types().calibrated_signal
+            )
+        else:
+            self.calibration = data_pb2.GetLiveReadsRequest.UNCALIBRATED
+            self.signal_dtype = _numpy_type(
+                self.connection.data.get_data_types().uncalibrated_signal
+            )
 
         # setup the queues and running status
         self._process_thread = None
@@ -188,14 +232,22 @@ class ReadUntilClient(object):
         self.reset()
 
     def run(self, **kwargs):
-        """Run Read Until analysis.
+        """Start the Read Until analysis.
 
-        :param **kwargs: keywork args for gRPC stream setup. Valid keys are:
-          - first_channel: First channel to monitor.
-          - last_channel: Last channel to monitor.
-          - min_chunk_size: minimum number of raw samples in a raw data chunk.
-          - action_batch: maximum number of actions to batch in a single response.
-          - action_throttle: minimum time between responses.
+        This method starts a thread that receives data from the MinKNOW gPRC
+        server, processing it into the data_queue (ReadCache) and also sends
+        responses (`unblock` and `stop_receiving`).
+
+        :keyword first_channel: First channel to monitor
+        :keyword last_channel: Last channel to monitor.
+        :keyword min_chunk_size: Minimum number of raw samples in a raw data chunk.
+        :keyword action_batch: Maximum number of actions to batch in a single response.
+        :keyword action_throttle: Minimum time between responses.
+        :type first_channel: int
+        :type last_channel: int
+        :type min_chunk_size: int
+        :type action_batch: int
+        :type action_throttle: float
         """
         self._process_thread = Thread(
             target=self._run, name=_new_thread_name(), kwargs=kwargs
@@ -234,7 +286,9 @@ class ReadUntilClient(object):
     def aquisition_progress(self):
         """Get MinKNOW data acquisition progress.
 
-        :returns: a structure with attributes .acquired and .processed.
+        :returns: An object from the ``minknow_api`` with attributes ``acquired``
+            and ``processed``
+        :rtype: minknow_api.acquisition_pb2.GetProgressResponse.raw_per_channel
 
         """
         return self.connection.acquisition.get_progress().raw_per_channel
@@ -246,9 +300,11 @@ class ReadUntilClient(object):
 
     @property
     def missed_reads(self):
-        """Number of reads ejected from queue (i.e reads had one or more chunks
-        enter into the analysis queue but were replaced with a distinct read
-        before being pulled from the queue."""
+        """Number of reads ejected from queue
+
+        That is the number of reads that had one or more chunks enter the queue
+        but were replaced with a new read before being pulled from the queue.
+        """
         return self.data_queue.missed
 
     @property
@@ -261,14 +317,28 @@ class ReadUntilClient(object):
 
     @property
     def is_running(self):
-        """The processing status of the gRPC stream."""
+        """The processing status of the gRPC stream.
+
+        While this is ``True`` the client is able to send/receive requests and
+        responses with the MinKNOW gPRC server.
+        """
         return self.running.is_set()
 
     def get_read_chunks(self, batch_size=1, last=True):
-        """Get read chunks, removing them from the queue.
+        """Get read chunks from the ReadCache
 
-        :param batch_size: maximum number of reads.
-        :param last: get the most recent (else oldest)?
+        This method returns a list of tuples, each tuple consists of
+        ``(channel, ReadData)``. Where ``ReadData`` is an instance of
+        ``minknow_api.data.GetLiveReadsResponse.ReadData``.
+
+        :param batch_size: Maximum number of reads to return
+        :type batch_size: int
+        :param last: If ``True`` get newest entries (LIFO), if ``False`` get
+            oldest entries (FIFO).
+        :type last: bool
+
+        :returns: list of tuples: (channel, ReadData)
+        :rtype: list
 
         """
         return self.data_queue.popitems(items=batch_size, last=last)
@@ -276,19 +346,26 @@ class ReadUntilClient(object):
     def unblock_read(self, read_channel, read_number, duration=0.1):
         """Request that a read be unblocked.
 
-        :param read_channel: a read's channel number.
-        :param read_number: a read's read number (the nth read per channel).
+        :param read_channel: Channel number.
+        :type read_channel: int
+        :param read_number: Read number, given by ``ReadData.number``
+        :type read_number: int
         :param duration: time in seconds to apply unblock voltage.
+        :type duration: float
 
+        :returns: None
         """
         self._put_action(read_channel, read_number, "unblock", duration=duration)
 
     def stop_receiving_read(self, read_channel, read_number):
         """Request to receive no more data for a read.
 
-        :param read_channel: a read's channel number.
-        :param read_number: a read's read number (the nth read per channel).
+        :param read_channel: Channel number.
+        :type read_channel: int
+        :param read_number: Read number, given by ``ReadData.number``
+        :type read_number: int
 
+        :returns: None
         """
         self._put_action(read_channel, read_number, "stop_further_data")
 
@@ -315,8 +392,8 @@ class ReadUntilClient(object):
 
     def _runner(
         self,
-        first_channel=1,
-        last_channel=512,
+        first_channel=None,
+        last_channel=None,
         min_chunk_size=ALLOWED_MIN_CHUNK_SIZE,
         action_batch=1000,
         action_throttle=0.001,
@@ -331,6 +408,13 @@ class ReadUntilClient(object):
         :param action_throttle: minimum time between responses.
 
         """
+        # This allows the channels to default to all available channels on the
+        #   device and lets current users keep access to subsets of the device
+        if first_channel is None:
+            first_channel = self.first_channel
+        if last_channel is None:
+            last_channel = self.last_channel
+
         # see note at top of this module
         if min_chunk_size > ALLOWED_MIN_CHUNK_SIZE:
             self.logger.warning("Reducing min_chunk_size to %s", ALLOWED_MIN_CHUNK_SIZE)
@@ -346,7 +430,7 @@ class ReadUntilClient(object):
             setup=data_pb2.GetLiveReadsRequest.StreamSetup(
                 first_channel=first_channel,
                 last_channel=last_channel,
-                raw_data_type=data_pb2.GetLiveReadsRequest.CALIBRATED,
+                raw_data_type=self.calibration,
                 sample_minimum_chunk_size=min_chunk_size,
             )
         )
@@ -399,8 +483,8 @@ class ReadUntilClient(object):
             #  ii) raw data for current reads
 
             # record a count of success and fails
-            if reads_chunk.action_reponses:
-                for response in reads_chunk.action_reponses:
+            if reads_chunk.action_responses:
+                for response in reads_chunk.action_responses:
                     action_type = self.sent_actions[response.action_id]
                     response_counter[action_type][response.response] += 1
 

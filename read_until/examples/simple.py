@@ -1,39 +1,15 @@
 """Simple example to read data from read until and send responses to server"""
 
 import argparse
-import concurrent.futures
 import functools
 import logging
 from multiprocessing.pool import ThreadPool
-import sys
-import traceback
 import time
 import typing
 
 import numpy
 
 import read_until
-
-
-class ThreadPoolExecutorStackTraced(concurrent.futures.ThreadPoolExecutor):
-    """ThreadPoolExecutor records only the text of an exception,
-    this class will give back a bit more."""
-
-    def submit(self, fn, *args, **kwargs):
-        """Submits the wrapped function instead of `fn`"""
-        return super(ThreadPoolExecutorStackTraced, self).submit(
-            self._function_wrapper, fn, *args, **kwargs
-        )
-
-    def _function_wrapper(self, func, *args, **kwargs):
-        """Wraps `func` in order to preserve the traceback of any kind of
-        raised exception
-
-        """
-        try:
-            return func(*args, **kwargs)
-        except Exception:
-            raise sys.exc_info()[0](traceback.format_exc())
 
 
 def get_parser() -> argparse.ArgumentParser:

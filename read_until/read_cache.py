@@ -1,9 +1,8 @@
-"""read_cache.py
-
-ReadCaches for the ReadUntilClient
+"""ReadCaches for the ReadUntilClient
 """
 from collections import OrderedDict
 from collections.abc import MutableMapping
+from itertools import islice
 from threading import RLock
 
 
@@ -17,19 +16,21 @@ class ReadCache(MutableMapping):
     overridden, see examples.
 
     :ivar size: The maximum size of the ReadCache
-    :type size: int
-    :ivar missed: The number of items deleted from the cache (read chunks replaced by a chunk from a different read)
-    :type missed: int
-    :ivar replaced: The number of items replaced by a newer item (read chunks replaced by a chunk from the same read)
-    :type replaced: int
+    :vartype size: int
+    :ivar missed: The number of items deleted from the cache (read chunks replaced
+        by a chunk from a different read)
+    :vartype missed: int
+    :ivar replaced: The number of items replaced by a newer item (read chunks
+        replaced by a chunk from the same read)
+    :vartype replaced: int
     :ivar _dict: An instance of an OrderedDict that forms the read cache
-    :type _dict: collections.OrderedDict
+    :vartype _dict: collections.OrderedDict
     :ivar lock: The instance of the lock used to make the cache thread-safe
-    :type lock: threading.Rlock
+    :vartype lock: threading.Rlock
 
     :Example:
 
-    When inheriting from ReadCache only the __setitem__ method needs to be
+    When inheriting from ReadCache only the ``__setitem__`` method needs to be
     overridden. The attribute `self._dict` is an instance of OrderedDict that
     forms the cache so this is the object that must be updated.
 
@@ -41,6 +42,9 @@ class ReadCache(MutableMapping):
     ...             self._dict[key] = value
 
     .. note:: This example is not likely to be a good cache.
+
+    .. note:: When a method "Delegates with lock." it is calling the same
+        method on the ``_dict`` attribute.
     """
 
     def __init__(self, size=100):
@@ -70,7 +74,7 @@ class ReadCache(MutableMapping):
         :param key: Channel number for the read chunk
         :type key: int
         :param value: Live read data object from MinKNOW rpc. Requires attribute ``number``
-        :type value: minknow.rpc.data_pb2.GetLiveReadsResponse.ReadData
+        :type value: minknow_api.data_pb2.GetLiveReadsResponse.ReadData
 
         :returns: None
         """
@@ -141,17 +145,38 @@ class ReadCache(MutableMapping):
 
 
 class AccumulatingCache(ReadCache):
+    """A thread-safe dict-like container with a maximum size
+
+    This cache has an identical interface to ReadCache, however
+    it accumulates raw_data chunks that belong to the same read
+    and concatenates them until a new read is received.
+
+    .. warning::
+        For compatibility with the ReadUntilClient, the attributes
+        `missed` and `replaced` are used here. However, `replaced`
+        is incremented whenever a new chunk is appended to a read
+        currently in the cache. `missed` is incremented whenever a
+        read is replaced with a new read, not seen in the cache.
+
+    .. warning::
+        To prevent reads from being ejected from this cache the
+        size should be set to the same as the maximum number of
+        channels on the sequencing device. e.g. 512 on MinION.
+    """
+
     def __setitem__(self, key, value):
         """Cache that accumulates read chunks as they are received
 
         :param key: Channel number for the read chunk
         :type key: int
-        :param value: Live read data object from MinKNOW rpc. Requires attributes `number` and `raw_data`.
-        :type value: minknow.rpc.data_pb2.GetLiveReadsResponse.ReadData
+        :param value: Live read data object from MinKNOW rpc. Requires
+            attributes `number` and `raw_data`.
+        :type value: minknow_api.data_pb2.GetLiveReadsResponse.ReadData
 
         :returns: None
 
-        .. notes:: In this implementation attribute `replaced` counts reads where the `raw_data` is accumulated, not replaced.
+        .. notes:: In this implementation attribute `replaced` counts reads where
+            the `raw_data` is accumulated, not replaced.
         """
         with self.lock:
             if key not in self:
@@ -168,7 +193,35 @@ class AccumulatingCache(ReadCache):
                     self._dict[key] = value
                     self.missed += 1
 
+            # By default reads are moved to the right
             self._dict.move_to_end(key)
 
             if len(self) > self.size:
                 k, v = self.popitem(last=False)
+
+    def popitems(self, items=1, last=True):
+        """Return a list of items from the cache.
+
+        In the ``AccumulatingCache`` returned items are `not` removed
+        from the queue allowing reads to be accumulated for their entire
+        lengths.
+
+        :param items: Maximum number of items to return
+        :type items: int
+        :param last: If True, return the newest entry (LIFO); else the oldest (FIFO).
+        :type last: bool
+
+        :returns: Output list of upto `items` (key, value) pairs from the cache
+        :rtype: list
+        """
+        with self.lock:
+            if items >= len(self._dict):
+                if last:
+                    return list(reversed(self._dict.items()))
+                else:
+                    return list(self._dict.items())
+
+            if last:
+                return list(islice(reversed(self._dict.items()), items))
+            else:
+                return list(islice(self._dict.items(), items))

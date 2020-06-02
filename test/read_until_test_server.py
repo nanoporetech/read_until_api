@@ -2,11 +2,8 @@
 
 import argparse
 from collections import namedtuple
-from concurrent import futures
-from contextlib import closing
 import logging
 from queue import Queue, Empty
-import socket
 import sys
 from threading import Thread
 import time
@@ -20,6 +17,8 @@ from minknow_api import (
     analysis_configuration_pb2_grpc,
     data_pb2,
     data_pb2_grpc,
+    device_pb2,
+    device_pb2_grpc,
 )
 from minknow_api.testutils import MockMinKNOWServer
 
@@ -47,6 +46,7 @@ class AnalysisConfigurationService(
 ):
     """Test server implementation of AnalysisConfigurationService
     """
+
     def get_read_classifications(self, request, context):
         """Mimic get read classifications, for now return hard-coded CLASS_MAP"""
         return analysis_configuration_pb2.GetReadClassificationsResponse(
@@ -180,11 +180,32 @@ class AcquisitionService(acquisition_pb2_grpc.AcquisitionServiceServicer):
         return self.progress
 
 
-def get_free_network_port() -> int:
-    """Find a free port number"""
-    with closing(socket.socket()) as temp_socket:
-        temp_socket.bind(("", 0))
-        return temp_socket.getsockname()[1]
+class DeviceService(device_pb2_grpc.DeviceServiceServicer):
+    def get_calibration(self, request, context):
+        # Return the identity calibration: scaling=1, offset=0
+        n_channels = len(range(request.first_channel, request.last_channel)) + 1
+        return device_pb2.GetCalibrationResponse(
+            digitisation=1,
+            offsets=[0.0] * n_channels,
+            pa_ranges=[1.0] * n_channels,
+            has_calibration=True,
+        )
+
+    def get_flow_cell_info(self, request, context):
+        return device_pb2.GetFlowCellInfoResponse(
+            has_flow_cell=True,
+            channel_count=512,
+            wells_per_channel=4,
+            flow_cell_id="",
+            asic_id_str="",
+            product_code="",
+            user_specified_flow_cell_id="",
+            user_specified_product_code="",
+            has_adapter=False,
+            adapter_id="",
+            temperature_offset=0.0,
+            asic_version="",
+        )
 
 
 class ReadUntilTestServer(MockMinKNOWServer):
@@ -194,6 +215,7 @@ class ReadUntilTestServer(MockMinKNOWServer):
             acquisition_service=AcquisitionService,
             analysis_configuration_service=AnalysisConfigurationService,
             data_service=DataService,
+            device_service=DeviceService,
         )
         kwargs = {**defaults, **kwargs}
         super().__init__(port, **kwargs)

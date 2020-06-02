@@ -17,14 +17,17 @@ setup(
     author_email="info@nanoporetech.com",
     description="Read Until API",
     install_requires=install_requires,
-    tests_require=["pytest"],
+    extra_requires={
+        "guppy": ["pyguppy_client_lib>=4.0.7"],
+    },
+    tests_require=[],
     # don't include any testing subpackages in dist
     packages=find_packages(exclude=["*.test", "*.test.*", "test.*", "test"]),
     zip_safe=False,
     entry_points={
         "console_scripts": [
-            "read_until_simple = {}.simple:main".format(PKG_NAME),
-            "read_until_ident = {}.identification:main".format(PKG_NAME),
+            "read_until_simple = read_until.simple:main",
+            "read_until_ident = read_until.identification:main [guppy]",
         ]
     },
 )
