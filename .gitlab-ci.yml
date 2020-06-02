@@ -1,7 +1,9 @@
 variables:
   PYTHON_DOCKER_IMAGE: python:3.7-buster
   GIT_SUBMODULE_STRATEGY: recursive
-  GUPPY_ARCHIVE: https://artifactory.oxfordnanolabs.local:443/artifactory/OFAN-General/release/4.0.7/ont-guppy-cpu_4.0.7_linux64.tar.gz
+  GUPPY_VERSION: 4.0.8
+  PYGUPPY_INSTALL: ont-pyguppy-client-lib==${GUPPY_VERSION}
+  GUPPY_ARCHIVE: https://artifactory.oxfordnanolabs.local:443/artifactory/OFAN-General/release/${GUPPY_VERSION}/ont-guppy-cpu_${GUPPY_VERSION}_linux64.tar.gz
 
 stages:
   - check
@@ -13,7 +15,9 @@ check.version:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
+    - pip install --extra-index-url \
+        https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple \
+        --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
     - python setup.py install
     - ru_version=$( python -c "import read_until; print(read_until.__version__)" 2>&1 )
     - tag_version="${CI_BUILD_REF_NAME/#v/}"
@@ -34,7 +38,9 @@ check.pylint:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
+    - pip install --extra-index-url \
+        https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple \
+        --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
     - pip install -r dev-requirements.txt
     - python setup.py install
     - ignore_pattern=".*pb2.*"
@@ -49,8 +55,12 @@ check.docs:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
-    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local ont-pyguppy-client-lib>=4.0.7
+    - pip install --extra-index-url \
+        https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple \
+        --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
+    - pip install --extra-index-url \
+        https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple
+        --trusted-host artifactory.oxfordnanolabs.local ${PYGUPPY_INSTALL}
     - pip install -r dev-requirements.txt
     - python setup.py install
     - sphinx-build -b html docs/ public
@@ -62,7 +72,9 @@ check.docs:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
+    - pip install --extra-index-url
+        https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple
+        --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
     - pip install -r dev-requirements.txt
     - python setup.py develop
     - pytest --cov=read_until --cov-report html:cov_html --cov-report term --junitxml=./junit.xml test/test_*.py
@@ -97,8 +109,12 @@ test_id_example:
         tar -xf guppy.tar.gz;
         export PATH=${PWD}/ont-guppy-cpu/bin:${PWD}/ont-guppy/bin:$PATH;
       fi
-    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
-    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local ont-pyguppy-client-lib>=4.0.7
+    - pip install --extra-index-url
+        https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple
+        --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
+    - pip install --extra-index-url
+        https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple
+        --trusted-host artifactory.oxfordnanolabs.local ${PYGUPPY_INSTALL}
     - pip install -r dev-requirements.txt
     - python setup.py develop
     - pytest --cov=read_until --cov-report html:cov_html --cov-report term --junitxml=./junit.xml
@@ -114,7 +130,9 @@ build_wheel:
   stage: package
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
+    - pip install --extra-index-url
+      https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple
+      --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
     - python setup.py bdist_wheel
   artifacts:
     paths:
@@ -125,7 +143,9 @@ install_wheel:
   image: ${PYTHON_DOCKER_IMAGE}
   dependencies: ["build_wheel"]
   script:
-    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local dist/*
+    - pip install --extra-index-url
+      https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple
+      --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
 
 wheel upload:
   stage: deploy

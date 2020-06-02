@@ -18,7 +18,7 @@ setup(
     description="Read Until API",
     install_requires=install_requires,
     extra_requires={
-        "guppy": ["pyguppy_client_lib>=4.0.7"],
+        "guppy": ["ont-pyguppy-client-lib>=4.0.8"],
     },
     tests_require=[],
     # don't include any testing subpackages in dist
