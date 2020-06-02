@@ -44,7 +44,20 @@ check.pylint:
   artifacts:
     reports:
       metrics: metrics.txt
-    
+
+check.docs:
+  stage: check
+  image: ${PYTHON_DOCKER_IMAGE}
+  script:
+    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local -r requirements.txt
+    - pip install --extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local ont-pyguppy-client-lib>=4.0.7
+    - pip install -r dev-requirements.txt
+    - python setup.py install
+    - sphinx-build -b html docs/ public
+  artifacts:
+    paths:
+      - public
+
 .test_skeleton: &test_skeleton
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
