@@ -167,6 +167,7 @@ def analysis(
                     barcode_kit,
                 )
             )
+            client.stop_receiving_read(channel, read_number)
             client.unblock_read(channel, read_number, unblock_duration)
 
         batch_time = time.time() - time_begin

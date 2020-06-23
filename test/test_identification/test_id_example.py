@@ -54,13 +54,13 @@ class TestBaseCallModule(unittest.TestCase):
         self.guppy_server.wait()
         rmtree(self.log_path)
 
-    def test_identification_enrich(self):
+    def test_identification(self):
         def run_main(gport, mport):
             read_until.examples.identification.main(
                 [
                     "--port",
                     str(mport),
-                    "--guppy-port",
+                    "--guppy_port",
                     str(gport),
                     "--run_time",
                     "60",
