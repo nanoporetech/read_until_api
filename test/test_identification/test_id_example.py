@@ -54,16 +54,13 @@ class TestBaseCallModule(unittest.TestCase):
         self.guppy_server.wait()
         rmtree(self.log_path)
 
-    def test_identification_enrich(self):
+    def test_identification(self):
         def run_main(gport, mport):
             read_until.examples.identification.main(
                 [
-                    "--enrich",
                     "--port",
-                    # "8800",
                     str(mport),
-                    "--guppy-port",
-                    # "5556",
+                    "--guppy_port",
                     str(gport),
                     "--run_time",
                     "60",
@@ -79,7 +76,7 @@ class TestBaseCallModule(unittest.TestCase):
 
         assert self.minknow_server.data_service.sent_reads > 0
         assert self.minknow_server.data_service.stop_count > 0
-        assert self.minknow_server.data_service.unblock_count == 0
+        assert self.minknow_server.data_service.unblock_count > 0
 
 
 if __name__ == "__main__":
