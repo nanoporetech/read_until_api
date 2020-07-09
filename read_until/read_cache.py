@@ -235,12 +235,28 @@ class AccumulatingCache(ReadCache):
                 self.popitem(last=False)
 
     def popitem(self, last=True):
-        """"""
+        """Remove and return a (key, value) pair from the cache
+
+        :param last: If True remove in LIFO order, if False remove in FIFO order
+        :type last: bool
+
+        :returns: key, value pair of (channel, ReadData)
+        :rtype: tuple
+        """
         ch, _ = self._keys.popitem(last=last)
         return ch, self._dict.pop(ch)
 
     def popitems(self, items=1, last=True):
-        """"""
+        """Return a list of popped items from the cache.
+
+        :param items: Maximum number of items to return
+        :type items: int
+        :param last: If True, return the newest entry (LIFO); else the oldest (FIFO).
+        :type last: bool
+
+        :returns: Output list of upto `items` (key, value) pairs from the cache
+        :rtype: list
+        """
         if items > self.size:
             items = self.size
 
