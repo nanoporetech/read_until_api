@@ -56,12 +56,6 @@ class ReadCache(MutableMapping):
             raise ValueError("'size' must be >1.")
         self.size = size
         self._dict = OrderedDict()
-
-        # ``self._keys`` is an optional lookup dictionary. It is used to track
-        #   reads that have been updated. If ``self._keys`` is used it is the
-        #   dictionary used for ``len()``, ``iter()``, ``keys()`` and it's keys
-        #   must be a subset of those in ``self._dict``.
-        self._keys = OrderedDict()
         self.lock = RLock()
         self.missed = 0
         self.replaced = 0
@@ -104,38 +98,26 @@ class ReadCache(MutableMapping):
     def __delitem__(self, key):
         """Delegate with lock."""
         with self.lock:
-            if self._keys:
-                del self._keys[key]
             del self._dict[key]
 
     def __len__(self):
         """Delegate with lock."""
         with self.lock:
-            if self._keys:
-                return len(self._keys)
             return len(self._dict)
 
     def __iter__(self):
         """Delegate with lock."""
         with self.lock:
-            if self._keys:
-                yield from self._keys.__iter__()
-                return
             yield from self._dict.__iter__()
 
     def keys(self):
         """Delegate with lock."""
         with self.lock:
-            if self._keys:
-                return self._keys.keys()
             return self._dict.keys()
 
     def popitem(self, last=True):
         """Delegate with lock."""
         with self.lock:
-            if self._keys:
-                channel, _ = self._keys.popitem(last=last)
-                return channel, self._dict.pop(channel)
             return self._dict.popitem(last=last)
 
     def popitems(self, items=1, last=True):
@@ -154,16 +136,18 @@ class ReadCache(MutableMapping):
 
         with self.lock:
             data = []
-            if self._keys:
-                while self._keys and len(data) != items:
-                    ch, _ = self._keys.popitem(last=last)
-                    data.append((ch, self._dict[ch]))
 
+            if items >= len(self._dict):
+                if last:
+                    data = list(reversed(self._dict.items()))
+                else:
+                    data = list(self._dict.items())
+                self._dict.clear()
                 return data
-            else:
-                while self._dict and len(data) != items:
-                    data.append(self._dict.popitem(last=last))
-                return data
+
+            while self._dict and len(data) != items:
+                data.append(self._dict.popitem(last=last))
+            return data
 
 
 class AccumulatingCache(ReadCache):
@@ -171,7 +155,9 @@ class AccumulatingCache(ReadCache):
 
     This cache has an identical interface to ReadCache, however
     it accumulates raw_data chunks that belong to the same read
-    and concatenates them until a new read is received.
+    and concatenates them until a new read is received. The only
+    attribute of the ``ReadData`` object that is updated is the
+    ``raw_data`` field
 
     .. warning::
         For compatibility with the ReadUntilClient, the attributes
@@ -185,6 +171,32 @@ class AccumulatingCache(ReadCache):
         size should be set to the same as the maximum number of
         channels on the sequencing device. e.g. 512 on MinION.
     """
+    def __init__(self, *args, **kwargs):
+        # ``self._keys`` is an lookup dictionary. It is used to track reads
+        #   that have been updated.
+        self._keys = OrderedDict()
+        super().__init__(*args, **kwargs)
+
+    def __delitem__(self, key):
+        """Delegate with lock."""
+        with self.lock:
+            del self._keys[key]
+            del self._dict[key]
+
+    def __len__(self):
+        """Delegate with lock."""
+        with self.lock:
+            return len(self._keys)
+
+    def __iter__(self):
+        """Delegate with lock."""
+        with self.lock:
+            yield from self._keys.__iter__()
+
+    def keys(self):
+        """Delegate with lock."""
+        with self.lock:
+            return self._keys.keys()
 
     def __setitem__(self, key, value):
         """Cache that accumulates read chunks as they are received
@@ -220,3 +232,29 @@ class AccumulatingCache(ReadCache):
 
             if len(self) > self.size:
                 self.popitem(last=False)
+
+    def popitem(self, last=True):
+        """"""
+        ch, _ = self._keys.popitem(last=last)
+        return ch, self._dict.pop(ch)
+
+    def popitems(self, items=1, last=True):
+        """"""
+        if items > self.size:
+            items = self.size
+
+        with self.lock:
+            data = []
+            if items >= len(self._keys):
+                if last:
+                    data = [(ch, self._dict[ch]) for ch in reversed(self._keys.keys())]
+                else:
+                    data = [(ch, self._dict[ch]) for ch in self._keys.keys()]
+                self._keys.clear()
+                return data
+
+            while self._keys and len(data) != items:
+                ch, _ = self._keys.popitem(last=last)
+                data.append((ch, self._dict[ch]))
+
+            return data
