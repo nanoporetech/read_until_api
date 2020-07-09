@@ -53,9 +53,7 @@ class ReadCache(MutableMapping):
         :type size: int, optional
         """
         if size < 1:
-            # FIXME: ValueError maybe more appropriate
-            #  https://docs.python.org/3/library/exceptions.html#ValueError
-            raise AttributeError("'size' must be >1.")
+            raise ValueError("'size' must be >1.")
         self.size = size
         self._dict = OrderedDict()
 

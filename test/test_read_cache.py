@@ -22,7 +22,7 @@ def test_maxsize():
 
     assert len(rc) == max_size, "ReadCache has wrong size"
 
-    with pytest.raises(AttributeError):
+    with pytest.raises(ValueError):
         rc = ReadCache(0)
 
 
