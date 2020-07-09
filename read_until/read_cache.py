@@ -2,7 +2,6 @@
 """
 from collections import OrderedDict
 from collections.abc import MutableMapping
-from itertools import islice
 from threading import RLock
 
 
@@ -59,6 +58,12 @@ class ReadCache(MutableMapping):
             raise AttributeError("'size' must be >1.")
         self.size = size
         self._dict = OrderedDict()
+
+        # ``self._keys`` is an optional lookup dictionary. It is used to track
+        #   reads that have been updated. If ``self._keys`` is used it is the
+        #   dictionary used for ``len()``, ``iter()``, ``keys()`` and it's keys
+        #   must be a subset of those in ``self._dict``.
+        self._keys = OrderedDict()
         self.lock = RLock()
         self.missed = 0
         self.replaced = 0
@@ -101,26 +106,38 @@ class ReadCache(MutableMapping):
     def __delitem__(self, key):
         """Delegate with lock."""
         with self.lock:
+            if self._keys:
+                del self._keys[key]
             del self._dict[key]
 
     def __len__(self):
         """Delegate with lock."""
         with self.lock:
+            if self._keys:
+                return len(self._keys)
             return len(self._dict)
 
     def __iter__(self):
         """Delegate with lock."""
         with self.lock:
+            if self._keys:
+                yield from self._keys.__iter__()
+                return
             yield from self._dict.__iter__()
 
     def keys(self):
         """Delegate with lock."""
         with self.lock:
+            if self._keys:
+                return self._keys.keys()
             return self._dict.keys()
 
     def popitem(self, last=True):
         """Delegate with lock."""
         with self.lock:
+            if self._keys:
+                channel, _ = self._keys.popitem(last=last)
+                return channel, self._dict.pop(channel)
             return self._dict.popitem(last=last)
 
     def popitems(self, items=1, last=True):
@@ -139,9 +156,16 @@ class ReadCache(MutableMapping):
 
         with self.lock:
             data = []
-            while self._dict and len(data) != items:
-                data.append(self._dict.popitem(last=last))
-        return data
+            if self._keys:
+                while self._keys and len(data) != items:
+                    ch, _ = self._keys.popitem(last=last)
+                    data.append((ch, self._dict[ch]))
+
+                return data
+            else:
+                while self._dict and len(data) != items:
+                    data.append(self._dict.popitem(last=last))
+                return data
 
 
 class AccumulatingCache(ReadCache):
@@ -193,35 +217,8 @@ class AccumulatingCache(ReadCache):
                     self._dict[key] = value
                     self.missed += 1
 
-            # By default reads are moved to the right
-            self._dict.move_to_end(key)
+            # Mark this channel as updated
+            self._keys[key] = True
 
             if len(self) > self.size:
-                k, v = self.popitem(last=False)
-
-    def popitems(self, items=1, last=True):
-        """Return a list of items from the cache.
-
-        In the ``AccumulatingCache`` returned items are `not` removed
-        from the queue allowing reads to be accumulated for their entire
-        lengths.
-
-        :param items: Maximum number of items to return
-        :type items: int
-        :param last: If True, return the newest entry (LIFO); else the oldest (FIFO).
-        :type last: bool
-
-        :returns: Output list of upto `items` (key, value) pairs from the cache
-        :rtype: list
-        """
-        with self.lock:
-            if items >= len(self._dict):
-                if last:
-                    return list(reversed(self._dict.items()))
-                else:
-                    return list(self._dict.items())
-
-            if last:
-                return list(islice(reversed(self._dict.items()), items))
-            else:
-                return list(islice(self._dict.items(), items))
+                self.popitem(last=False)
