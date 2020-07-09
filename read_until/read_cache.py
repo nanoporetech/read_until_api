@@ -171,6 +171,7 @@ class AccumulatingCache(ReadCache):
         size should be set to the same as the maximum number of
         channels on the sequencing device. e.g. 512 on MinION.
     """
+
     def __init__(self, *args, **kwargs):
         # ``self._keys`` is an lookup dictionary. It is used to track reads
         #   that have been updated.
