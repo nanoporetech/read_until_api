@@ -231,13 +231,15 @@ def test_popitems():
     assert list(reversed(keys)) == [ch for ch, _ in reads], "Reads in wrong order"
 
     # Re-fill and request more than max_size
+    keys = []
     for c in range(1, max_size + 1):
         channel, read = generate_read(channel=c)
         rc[channel] = read
+        keys.append(channel)
 
-    reads = rc.popitems(2 * max_size)
+    reads = rc.popitems(2 * max_size, last=False)
     assert not rc, "ReadCache should be empty"
-    assert len(reads) == max_size, "Wrong number of reads returned"
+    assert keys == [ch for ch, _ in reads], "Reads in wrong order"
 
 
 def test_attributes():
@@ -376,6 +378,7 @@ def test_accumulating_popitems_lifo_all():
     fifo_keys = [keys.pop(-1) for _ in range(max_size)]
     assert fifo_keys == all_items
 
+
 def test_accumulating_popitems_fifo_all():
     max_size = 10
     rc = AccumulatingCache(max_size)
@@ -389,6 +392,34 @@ def test_accumulating_popitems_fifo_all():
     # Test asking for more than capacity, FIFO -> insertion order
     all_items = [ch for ch, data in rc.popitems(max_size + 1, last=False)]
     assert keys == all_items
+
+
+def test_accumulating_del():
+    max_size = 2
+    rc = AccumulatingCache(max_size)
+    channel, read = generate_read()
+
+    rc[channel] = read
+    assert len(rc) == 1
+    del rc[channel]
+    assert len(rc) == 0
+
+
+def test_accumulating_iter():
+    max_size = 5
+    rc = AccumulatingCache(max_size)
+
+    keys = []
+    for c in range(1, max_size + 1):
+        channel, read = generate_read(channel=c)
+        rc[channel] = read
+        keys.append(channel)
+
+    iter_keys = []
+    for k, v in rc.items():
+        iter_keys.append(k)
+
+    assert keys == iter_keys
 
 
 def test_accumulating_attributes():
