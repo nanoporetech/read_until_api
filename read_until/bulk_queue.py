@@ -36,7 +36,7 @@ class BulkQueue(object):
     def pop(self, timeout=None):
         """
         Pops an item from the front of the queue. If timeout is None/0, try to pop
-        immediately else wait up to timeout seconds for there to be something in the queue.
+        immediately else wait up to timeout seconds to be notified for there to be something in the queue.
 
         If there is nothing in the queue, an IndexError will be raised.
 
@@ -51,7 +51,7 @@ class BulkQueue(object):
     def pop_all(self, timeout=None):
         """
         Pops all elements from the queue. If timeout is None/0, pop all immediately
-        else wait up to timeout seconds for there to be something in the queue.
+        else wait up to timeout seconds to be notified for there to be something in the queue.
 
         :param timeout: How long to wait for, in seconds, for items to appear
         :returns: All items in the queue
