@@ -22,7 +22,7 @@ def test_maxsize():
 
     assert len(rc) == max_size, "ReadCache has wrong size"
 
-    with pytest.raises(AttributeError):
+    with pytest.raises(ValueError):
         rc = ReadCache(0)
 
 
@@ -231,13 +231,15 @@ def test_popitems():
     assert list(reversed(keys)) == [ch for ch, _ in reads], "Reads in wrong order"
 
     # Re-fill and request more than max_size
+    keys = []
     for c in range(1, max_size + 1):
         channel, read = generate_read(channel=c)
         rc[channel] = read
+        keys.append(channel)
 
-    reads = rc.popitems(2 * max_size)
+    reads = rc.popitems(2 * max_size, last=False)
     assert not rc, "ReadCache should be empty"
-    assert len(reads) == max_size, "Wrong number of reads returned"
+    assert keys == [ch for ch, _ in reads], "Reads in wrong order"
 
 
 def test_attributes():
@@ -326,7 +328,7 @@ def test_accumulating_replace():
     assert rc.keys() == {2, 3}
 
 
-def test_accumulating_popitems():
+def test_accumulating_popitems_lifo():
     max_size = 10
     rc = AccumulatingCache(max_size)
 
@@ -340,21 +342,84 @@ def test_accumulating_popitems():
     # Get the newest n items, these will be given newest -> oldest
     #   eg [10, 9, 8, ...], the insertion order is reversed
     lifo = [ch for ch, data in rc.popitems(5, last=True)]
-    # keys[n:][::-1] '[n:]' gets n items to the end,
-    #   '[::-1]' reverses the previous list
-    assert lifo == keys[n:][::-1]
+    lifo_keys = [keys.pop(-1) for _ in range(n)]
+    assert lifo == lifo_keys
+
+
+def test_accumulating_popitems_fifo():
+    max_size = 10
+    rc = AccumulatingCache(max_size)
+
+    n = 5
+    keys = []
+    for i in range(1, max_size + 1):
+        ch, read = generate_read(channel=i)
+        rc[ch] = read
+        keys.append(i)
 
     # Get the oldest n items, just the first n items
     fifo = [ch for ch, data in rc.popitems(n, last=False)]
-    assert fifo == keys[:n]
+    fifo_keys = [keys.pop(0) for _ in range(n)]
+    assert fifo == fifo_keys
+
+
+def test_accumulating_popitems_lifo_all():
+    max_size = 10
+    rc = AccumulatingCache(max_size)
+
+    keys = []
+    for i in range(1, max_size + 1):
+        ch, read = generate_read(channel=i)
+        rc[ch] = read
+        keys.append(i)
 
     # Test asking for more than capacity, LIFO -> reversed keys
-    all_items = [ch for ch, data in rc.popitems(max_size + 1, last=True)]
-    assert keys[::-1] == all_items
+    all_items = [ch for ch, data in rc.popitems(max_size * 2, last=True)]
+    fifo_keys = [keys.pop(-1) for _ in range(max_size)]
+    assert fifo_keys == all_items
+
+
+def test_accumulating_popitems_fifo_all():
+    max_size = 10
+    rc = AccumulatingCache(max_size)
+
+    keys = []
+    for i in range(1, max_size + 1):
+        ch, read = generate_read(channel=i)
+        rc[ch] = read
+        keys.append(i)
 
     # Test asking for more than capacity, FIFO -> insertion order
     all_items = [ch for ch, data in rc.popitems(max_size + 1, last=False)]
     assert keys == all_items
+
+
+def test_accumulating_del():
+    max_size = 2
+    rc = AccumulatingCache(max_size)
+    channel, read = generate_read()
+
+    rc[channel] = read
+    assert len(rc) == 1
+    del rc[channel]
+    assert len(rc) == 0
+
+
+def test_accumulating_iter():
+    max_size = 5
+    rc = AccumulatingCache(max_size)
+
+    keys = []
+    for c in range(1, max_size + 1):
+        channel, read = generate_read(channel=c)
+        rc[channel] = read
+        keys.append(channel)
+
+    iter_keys = []
+    for k, v in rc.items():
+        iter_keys.append(k)
+
+    assert keys == iter_keys
 
 
 def test_accumulating_attributes():

@@ -2,7 +2,6 @@
 """
 from collections import OrderedDict
 from collections.abc import MutableMapping
-from itertools import islice
 from threading import RLock
 
 
@@ -54,9 +53,7 @@ class ReadCache(MutableMapping):
         :type size: int, optional
         """
         if size < 1:
-            # FIXME: ValueError maybe more appropriate
-            #  https://docs.python.org/3/library/exceptions.html#ValueError
-            raise AttributeError("'size' must be >1.")
+            raise ValueError("'size' must be >1.")
         self.size = size
         self._dict = OrderedDict()
         self.lock = RLock()
@@ -139,9 +136,18 @@ class ReadCache(MutableMapping):
 
         with self.lock:
             data = []
+
+            if items >= len(self._dict):
+                if last:
+                    data = list(reversed(self._dict.items()))
+                else:
+                    data = list(self._dict.items())
+                self._dict.clear()
+                return data
+
             while self._dict and len(data) != items:
                 data.append(self._dict.popitem(last=last))
-        return data
+            return data
 
 
 class AccumulatingCache(ReadCache):
@@ -149,7 +155,9 @@ class AccumulatingCache(ReadCache):
 
     This cache has an identical interface to ReadCache, however
     it accumulates raw_data chunks that belong to the same read
-    and concatenates them until a new read is received.
+    and concatenates them until a new read is received. The only
+    attribute of the ``ReadData`` object that is updated is the
+    ``raw_data`` field
 
     .. warning::
         For compatibility with the ReadUntilClient, the attributes
@@ -163,6 +171,33 @@ class AccumulatingCache(ReadCache):
         size should be set to the same as the maximum number of
         channels on the sequencing device. e.g. 512 on MinION.
     """
+
+    def __init__(self, *args, **kwargs):
+        # ``self._keys`` is an lookup dictionary. It is used to track reads
+        #   that have been updated.
+        self._keys = OrderedDict()
+        super().__init__(*args, **kwargs)
+
+    def __delitem__(self, key):
+        """Delegate with lock."""
+        with self.lock:
+            del self._keys[key]
+            del self._dict[key]
+
+    def __len__(self):
+        """Delegate with lock."""
+        with self.lock:
+            return len(self._keys)
+
+    def __iter__(self):
+        """Delegate with lock."""
+        with self.lock:
+            yield from self._keys.__iter__()
+
+    def keys(self):
+        """Delegate with lock."""
+        with self.lock:
+            return self._keys.keys()
 
     def __setitem__(self, key, value):
         """Cache that accumulates read chunks as they are received
@@ -193,18 +228,26 @@ class AccumulatingCache(ReadCache):
                     self._dict[key] = value
                     self.missed += 1
 
-            # By default reads are moved to the right
-            self._dict.move_to_end(key)
+            # Mark this channel as updated
+            self._keys[key] = True
 
             if len(self) > self.size:
-                k, v = self.popitem(last=False)
+                self.popitem(last=False)
+
+    def popitem(self, last=True):
+        """Remove and return a (key, value) pair from the cache
+
+        :param last: If True remove in LIFO order, if False remove in FIFO order
+        :type last: bool
+
+        :returns: key, value pair of (channel, ReadData)
+        :rtype: tuple
+        """
+        ch, _ = self._keys.popitem(last=last)
+        return ch, self._dict.pop(ch)
 
     def popitems(self, items=1, last=True):
-        """Return a list of items from the cache.
-
-        In the ``AccumulatingCache`` returned items are `not` removed
-        from the queue allowing reads to be accumulated for their entire
-        lengths.
+        """Return a list of popped items from the cache.
 
         :param items: Maximum number of items to return
         :type items: int
@@ -214,14 +257,21 @@ class AccumulatingCache(ReadCache):
         :returns: Output list of upto `items` (key, value) pairs from the cache
         :rtype: list
         """
-        with self.lock:
-            if items >= len(self._dict):
-                if last:
-                    return list(reversed(self._dict.items()))
-                else:
-                    return list(self._dict.items())
+        if items > self.size:
+            items = self.size
 
-            if last:
-                return list(islice(reversed(self._dict.items()), items))
-            else:
-                return list(islice(self._dict.items(), items))
+        with self.lock:
+            data = []
+            if items >= len(self._keys):
+                if last:
+                    data = [(ch, self._dict[ch]) for ch in reversed(self._keys.keys())]
+                else:
+                    data = [(ch, self._dict[ch]) for ch in self._keys.keys()]
+                self._keys.clear()
+                return data
+
+            while self._keys and len(data) != items:
+                ch, _ = self._keys.popitem(last=last)
+                data.append((ch, self._dict[ch]))
+
+            return data
