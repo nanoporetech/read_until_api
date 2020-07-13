@@ -5,6 +5,7 @@ connection point between the read_until_api and MinKNOW.
 """
 
 import logging
+import numpy
 import time
 import uuid
 from collections import Counter, defaultdict, namedtuple
@@ -12,11 +13,9 @@ from itertools import count as _count
 from threading import Event, Thread
 from typing import Set
 
-import numpy
-
 from minknow_api import data_pb2, Connection
-from read_until.read_cache import ReadCache
 from read_until.bulk_queue import BulkQueue
+from read_until.read_cache import ReadCache
 
 __all__ = ["ReadUntilClient"]
 
