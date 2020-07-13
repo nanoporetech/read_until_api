@@ -177,7 +177,7 @@ class ReadUntilClient(object):
 
         # Get calibration values
         self.calibration_data = self.connection.device.get_calibration(
-            first_channel=self.first_channel, last_channel=self.last_channel,
+            first_channel=self.first_channel, last_channel=self.last_channel
         )
         ranges = self.calibration_data.pa_ranges
         offsets = self.calibration_data.offsets
@@ -352,7 +352,10 @@ class ReadUntilClient(object):
         :returns: None
         """
 
-        actions = [self._generate_action(channel, read, "unblock", duration=duration) for (channel, read) in reads]
+        actions = [
+            self._generate_action(channel, read, "unblock", duration=duration)
+            for (channel, read) in reads
+        ]
         self.action_queue.put_iterable(actions)
 
     def unblock_read(self, read_channel, read_number, duration=0.1):
@@ -380,7 +383,10 @@ class ReadUntilClient(object):
         :returns: None
         """
 
-        actions = [self._generate_action(channel, read, "stop_further_data") for (channel, read) in reads]
+        actions = [
+            self._generate_action(channel, read, "stop_further_data")
+            for (channel, read) in reads
+        ]
         self.action_queue.put_iterable(actions)
 
     def stop_receiving_read(self, read_channel, read_number):
