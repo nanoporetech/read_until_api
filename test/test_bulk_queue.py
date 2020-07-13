@@ -10,6 +10,7 @@ def test_put():
     bq.put(5)
 
     assert bq.pop_all() == [5]
+    assert bq.pop_all() == []
 
 
 def test_put_iterable():
@@ -17,6 +18,7 @@ def test_put_iterable():
     bq.put_iterable([5, 6])
 
     assert bq.pop_all() == [5, 6]
+    assert bq.pop_all() == []
 
 
 def test_pop():
@@ -24,12 +26,13 @@ def test_pop():
     bq.put(5)
 
     assert bq.pop() == 5
+    assert bq.pop_all() == []
 
 
 def test_pop_error():
     bq = BulkQueue()
     with pytest.raises(IndexError):
-        bq.pop(timeout=0.001)
+        bq.pop()
 
 
 def test_pop_wait():
@@ -39,8 +42,30 @@ def test_pop_wait():
         time.sleep(0.1)
         bq.put(5)
 
-    threading.Thread(target=slow_push).start()
+    t = threading.Thread(target=slow_push)
+    t.start()
+
     assert bq.pop(timeout=0.3) == 5
+
+    t.join()
+    assert bq.pop_all() == []
+
+
+def test_pop_not_wait():
+    bq = BulkQueue()
+
+    def slow_push():
+        time.sleep(0.1)
+        bq.put(5)
+
+    t = threading.Thread(target=slow_push)
+    t.start()
+
+    with pytest.raises(IndexError):
+        bq.pop()
+
+    t.join()
+    assert bq.pop_all() == [5]
 
 
 def test_pop_all():
@@ -49,6 +74,7 @@ def test_pop_all():
     bq.put(6)
 
     assert bq.pop_all() == [5, 6]
+    assert bq.pop_all() == []
 
 def test_pop_all_wait():
     bq = BulkQueue()
@@ -57,5 +83,27 @@ def test_pop_all_wait():
         time.sleep(0.1)
         bq.put(5)
 
-    threading.Thread(target=slow_push).start()
+    t = threading.Thread(target=slow_push)
+    t.start()
+
     assert bq.pop_all(timeout=0.3) == [5]
+
+    t.join()
+    assert bq.pop_all() == []
+
+
+def test_pop_all_no_wait():
+    bq = BulkQueue()
+
+    def slow_push():
+        time.sleep(0.1)
+        bq.put(5)
+
+    t = threading.Thread(target=slow_push)
+    t.start()
+
+    assert bq.pop_all() == []
+
+    t.join()
+    assert bq.pop_all() == [5]
+    assert bq.pop_all() == []
