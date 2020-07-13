@@ -339,7 +339,7 @@ class ReadUntilClient(object):
         return self.data_queue.popitems(items=batch_size, last=last)
 
     def unblock_reads(self, reads, duration=0.1):
-        """Request for a bunch of read be unblocked.
+        """Request for a bunch of reads be unblocked.
 
         reads is expected to be a list of (channel, ReadData.number)
 
@@ -372,7 +372,7 @@ class ReadUntilClient(object):
         self.unblock_reads([(read_channel, read_number)], duration=duration)
 
     def stop_receiving_reads(self, reads):
-        """Request for a bunch of reads to not receive anymore data for it.
+        """Request for a bunch of reads to not receive anymore data.
 
         reads is expected to be a list of (channel, ReadData.number)
 
