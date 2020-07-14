@@ -6,6 +6,7 @@ connection point between the read_until_api and MinKNOW.
 
 import logging
 import numpy
+import queue
 import time
 import uuid
 from collections import Counter, defaultdict, namedtuple
@@ -14,7 +15,6 @@ from threading import Event, Thread
 from typing import Set
 
 from minknow_api import data_pb2, Connection
-from read_until.bulk_queue import BulkQueue
 from read_until.read_cache import ReadCache
 
 __all__ = ["ReadUntilClient"]
@@ -271,7 +271,7 @@ class ReadUntilClient(object):
         self.running = Event()
         # the action_queue is used to store unblock/stop_receiving_data
         #    requests before they are put on the gRPC stream.
-        self.action_queue = BulkQueue()
+        self.action_queue = queue.Queue()
         # the data_queue is used to store the latest chunk per channel
         self.data_queue = self.CacheType(size=self.cache_size)
         # stores all sent action ids -> unblock/stop
@@ -355,7 +355,7 @@ class ReadUntilClient(object):
             self._generate_action(channel, read, "unblock", duration=duration)
             for (channel, read) in reads
         ]
-        self.action_queue.put_iterable(actions)
+        self.action_queue.put_nowait(actions)
 
     def unblock_read(self, read_channel, read_number, duration=0.1):
         """Request that a read be unblocked.
@@ -386,7 +386,7 @@ class ReadUntilClient(object):
             self._generate_action(channel, read, "stop_further_data")
             for (channel, read) in reads
         ]
-        self.action_queue.put_iterable(actions)
+        self.action_queue.put_nowait(actions)
 
     def stop_receiving_read(self, read_channel, read_number):
         """Request to receive no more data for a read.
@@ -462,13 +462,16 @@ class ReadUntilClient(object):
         )
 
         while self.is_running:
-            actions = self.action_queue.pop_all(timeout=0.1)
-            if actions:
+            try:
+                actions = self.action_queue.get(timeout=0.1)
+
                 self.logger.debug("Sending %s actions.", len(actions))
                 action_group = data_pb2.GetLiveReadsRequest(
                     actions=data_pb2.GetLiveReadsRequest.Actions(actions=actions)
                 )
                 yield action_group
+            except queue.Empty:
+                continue
 
     def _process_reads(self, reads):
         """Process the gRPC stream data, storing read chunks in the data_queue.
