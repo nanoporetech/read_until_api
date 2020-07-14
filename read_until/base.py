@@ -355,7 +355,7 @@ class ReadUntilClient(object):
             self._generate_action(channel, read, "unblock", duration=duration)
             for (channel, read) in reads
         ]
-        self.action_queue.put_nowait(actions)
+        self.action_queue.put(actions)
 
     def unblock_read(self, read_channel, read_number, duration=0.1):
         """Request that a read be unblocked.
@@ -386,7 +386,7 @@ class ReadUntilClient(object):
             self._generate_action(channel, read, "stop_further_data")
             for (channel, read) in reads
         ]
-        self.action_queue.put_nowait(actions)
+        self.action_queue.put(actions)
 
     def stop_receiving_read(self, read_channel, read_number):
         """Request to receive no more data for a read.
