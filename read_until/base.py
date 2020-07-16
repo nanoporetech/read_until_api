@@ -343,7 +343,7 @@ class ReadUntilClient(object):
 
         reads is expected to be a list of (channel, ReadData.number)
 
-        :param reads: List of (channel, read_id)
+        :param reads: List of (channel, read_number)
         :type reads: list(tuple)
         :param duration: time in seconds to apply unblock voltage.
         :type duration: float
@@ -376,7 +376,7 @@ class ReadUntilClient(object):
 
         reads is expected to be a list of (channel, ReadData.number)
 
-        :param reads: List of (channel, read_id)
+        :param reads: List of (channel, read_number)
         :type reads: list(tuple)
 
         :returns: None
