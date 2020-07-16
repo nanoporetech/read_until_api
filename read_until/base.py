@@ -5,6 +5,7 @@ connection point between the read_until_api and MinKNOW.
 """
 
 import logging
+import numpy
 import queue
 import time
 import uuid
@@ -12,8 +13,6 @@ from collections import Counter, defaultdict, namedtuple
 from itertools import count as _count
 from threading import Event, Thread
 from typing import Set
-
-import numpy
 
 from minknow_api import data_pb2, Connection
 from read_until.read_cache import ReadCache
@@ -177,7 +176,7 @@ class ReadUntilClient(object):
 
         # Get calibration values
         self.calibration_data = self.connection.device.get_calibration(
-            first_channel=self.first_channel, last_channel=self.last_channel,
+            first_channel=self.first_channel, last_channel=self.last_channel
         )
         ranges = self.calibration_data.pa_ranges
         offsets = self.calibration_data.offsets
@@ -246,8 +245,6 @@ class ReadUntilClient(object):
         :keyword first_channel: First channel to monitor
         :keyword last_channel: Last channel to monitor.
         :keyword min_chunk_size: Minimum number of raw samples in a raw data chunk.
-        :keyword action_batch: Maximum number of actions to batch in a single response.
-        :keyword action_throttle: Minimum time between responses.
         :keyword max_unblock_read_length_samples: Maximum read length MinKNOW
             will attempt to unblock in samples.
         :keyword max_unblock_read_length_seconds: Maximum read length MinKNOW
@@ -255,8 +252,6 @@ class ReadUntilClient(object):
         :type first_channel: int
         :type last_channel: int
         :type min_chunk_size: int
-        :type action_batch: int
-        :type action_throttle: float
         :type max_unblock_read_length_samples: int
         :type max_unblock_read_length_seconds: float
         """
@@ -354,6 +349,25 @@ class ReadUntilClient(object):
         """
         return self.data_queue.popitems(items=batch_size, last=last)
 
+    def unblock_read_batch(self, reads, duration=0.1):
+        """Request for a bunch of reads be unblocked.
+
+        reads is expected to be a list of (channel, ReadData.number)
+
+        :param reads: List of (channel, read_number)
+        :type reads: list(tuple)
+        :param duration: time in seconds to apply unblock voltage.
+        :type duration: float
+
+        :returns: None
+        """
+
+        actions = [
+            self._generate_action(channel, read, "unblock", duration=duration)
+            for (channel, read) in reads
+        ]
+        self.action_queue.put(actions)
+
     def unblock_read(self, read_channel, read_number, duration=0.1):
         """Request that a read be unblocked.
 
@@ -366,7 +380,24 @@ class ReadUntilClient(object):
 
         :returns: None
         """
-        self._put_action(read_channel, read_number, "unblock", duration=duration)
+        self.unblock_read_batch([(read_channel, read_number)], duration=duration)
+
+    def stop_receiving_batch(self, reads):
+        """Request for a bunch of reads to not receive anymore data.
+
+        reads is expected to be a list of (channel, ReadData.number)
+
+        :param reads: List of (channel, read_number)
+        :type reads: list(tuple)
+
+        :returns: None
+        """
+
+        actions = [
+            self._generate_action(channel, read, "stop_further_data")
+            for (channel, read) in reads
+        ]
+        self.action_queue.put(actions)
 
     def stop_receiving_read(self, read_channel, read_number):
         """Request to receive no more data for a read.
@@ -378,7 +409,7 @@ class ReadUntilClient(object):
 
         :returns: None
         """
-        self._put_action(read_channel, read_number, "stop_further_data")
+        self.stop_receiving_batch([(read_channel, read_number)])
 
     def _run(self, **kwargs):
         self.running.set()
@@ -406,8 +437,6 @@ class ReadUntilClient(object):
         first_channel=None,
         last_channel=None,
         min_chunk_size=ALLOWED_MIN_CHUNK_SIZE,
-        action_batch=1000,
-        action_throttle=0.001,
         max_unblock_read_length_samples=None,
         max_unblock_read_length_seconds=None,
     ):
@@ -417,8 +446,6 @@ class ReadUntilClient(object):
         :param first_channel: lowest channel for which to receive raw data.
         :param last_channel: highest channel (inclusive) for which to receive data.
         :param min_chunk_size: minimum number of raw samples in a raw data chunk.
-        :param action_batch: maximum number of actions to batch in a single response.
-        :param action_throttle: minimum time between responses.
         :param max_unblock_read_length_samples: Maximum read length MinKNOW will
             attempt to unblock (in samples).
         :param max_unblock_read_length_seconds: Maximum read length MinKNOW will
@@ -469,31 +496,17 @@ class ReadUntilClient(object):
             setup=data_pb2.GetLiveReadsRequest.StreamSetup(**setup)
         )
 
-        time_start = None
         while self.is_running:
-            time_start = time.time()
-            # get as many items as we can up to the maximum, without blocking
-            actions = list()
-            for _ in range(action_batch):
-                try:
-                    action = self.action_queue.get_nowait()
-                except queue.Empty:
-                    break
-                else:
-                    actions.append(action)
+            try:
+                actions = self.action_queue.get(timeout=0.1)
 
-            n_actions = len(actions)
-            if n_actions > 0:
-                self.logger.debug("Sending %s actions.", n_actions)
+                self.logger.debug("Sending %s actions.", len(actions))
                 action_group = data_pb2.GetLiveReadsRequest(
                     actions=data_pb2.GetLiveReadsRequest.Actions(actions=actions)
                 )
                 yield action_group
-
-            # limit response interval
-            time_end = time.time()
-            if time_start + action_throttle > time_end:
-                time.sleep(action_throttle + time_start - time_end)
+            except queue.Empty:
+                continue
 
     def _process_reads(self, reads):
         """Process the gRPC stream data, storing read chunks in the data_queue.
@@ -571,9 +584,8 @@ class ReadUntilClient(object):
                 raw_data_bytes = 0
                 last_msg_time = now
 
-    def _put_action(self, read_channel, read_number, action, **params):
-        """Stores an action requests on the queue ready to be placed on the
-        gRPC stream.
+    def _generate_action(self, read_channel, read_number, action, **params):
+        """Returns an action request to be placed on the queue
 
         :param read_channel: a read's channel number.
         :param read_number: a read's read number (the nth read per channel).
@@ -601,7 +613,6 @@ class ReadUntilClient(object):
             )
 
         action_request = data_pb2.GetLiveReadsRequest.Action(**action_kwargs)
-        self.action_queue.put(action_request)
         self.logger.debug(
             "Action %s on channel %s, read %s: %s",
             action_id,
@@ -609,3 +620,4 @@ class ReadUntilClient(object):
             read_number,
             action,
         )
+        return action_request
