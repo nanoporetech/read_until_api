@@ -338,7 +338,7 @@ class ReadUntilClient(object):
         """
         return self.data_queue.popitems(items=batch_size, last=last)
 
-    def unblock_reads(self, reads, duration=0.1):
+    def unblock_read_batch(self, reads, duration=0.1):
         """Request for a bunch of reads be unblocked.
 
         reads is expected to be a list of (channel, ReadData.number)
@@ -369,9 +369,9 @@ class ReadUntilClient(object):
 
         :returns: None
         """
-        self.unblock_reads([(read_channel, read_number)], duration=duration)
+        self.unblock_read_batch([(read_channel, read_number)], duration=duration)
 
-    def stop_receiving_reads(self, reads):
+    def stop_receiving_batch(self, reads):
         """Request for a bunch of reads to not receive anymore data.
 
         reads is expected to be a list of (channel, ReadData.number)
@@ -398,7 +398,7 @@ class ReadUntilClient(object):
 
         :returns: None
         """
-        self.stop_receiving_reads([(read_channel, read_number)])
+        self.stop_receiving_batch([(read_channel, read_number)])
 
     def _run(self, **kwargs):
         self.running.set()
