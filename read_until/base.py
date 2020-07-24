@@ -50,21 +50,6 @@ CLASS_MAP = {
 }
 
 
-def _numpy_type(desc):
-    """Convert data type from RPC to numpy"""
-    if desc.type == desc.SIGNED_INTEGER:
-        type_char = "i"
-    elif desc.type == desc.UNSIGNED_INTEGER:
-        type_char = "u"
-    elif desc.type == desc.FLOATING_POINT:
-        type_char = "f"
-    else:
-        raise RuntimeError("Unknown type {}".format(desc))
-
-    type_desc = "{}{}{}".format(">" if desc.big_endian else "<", type_char, desc.size)
-    return numpy.dtype(type_desc)
-
-
 class ReadCache(object):
     def __init__(self, size=100):
         """An ordered and keyed queue of a maximum size to store read chunks.
@@ -271,7 +256,7 @@ class ReadUntilClient(object):
         self.logger.info('Got rpc connection.')
         self.msgs = self.connection.data._pb
 
-        self.signal_dtype = _numpy_type(self.connection.data.get_data_types().calibrated_signal)
+        self.signal_dtype = minknow_api.data.get_numpy_types(self.connection).calibrated_signal
 
         # setup the queues and running status
         self._process_thread = None
