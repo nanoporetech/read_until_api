@@ -24,20 +24,19 @@ the read in progress.
 Installation
 ------------
 
-The client requires MinKNOW for MinION 18.02 or later (MinKNOW-Core 1.12).
+The client requires MinKNOW for MinION 20.06 or later (MinKNOW-Core 4.04).
 
-The package can be installed into MinKNOW's python environment using the python
-interpreter in the MinKNOW root directory. For example on Ubuntu:
+The package can be installed into a python3 virtual environment For example on Ubuntu:
 
-    sudo /opt/ONT/MinKNOW/ont-python/bin/python setup.py install
-
-(The MinKNOW python is located at
-`/Applications/MinKNOW.app/Contents/Resources/ont-python/bin/python` on OSX
-and `C:\Program Files\OxfordNanopore\MinKNOW\ont-python\python.exe` on Windows).
-
-Installation of the package into other python environments is currently
-unsupported. An example installation process for Ubuntu including installing
-additional python modules can be found in [Ubuntu Install](./INSTALL.md).
+```bash
+python3 -m venv read_until_env
+source read_until_env/bin/activate
+pip install --upgrade pip
+# Install from github:
+pip install git+https://github.com/nanoporetech/read_until_api
+# Or from a local clone
+python setup.py install
+```
 
 Two demonstration programs are provided (and are installed into
 MinKNOW/ont-python/bin/):
@@ -47,9 +46,8 @@ MinKNOW/ont-python/bin/):
        for developers.
    2.  `read_until_ident`: this is a rather more fully featured example, using
        the API to identify reads via basecalling and alignment. To run it
-       requires the optional dependencies of scrappy and mappy. These can be
-       installed via `ont-python/bin/python -m pip install mappy scrappie`.
-       To use the `scrappy` basecaller efficiently it is important to set
+       requires the optional dependencies of scrappy and mappy. To use the 
+       `scrappy` basecaller efficiently it is important to set 
        the blas library to be single threaded, this is ordinarily done with:
 
            export OPENBLAS_NUM_THREADS=1
