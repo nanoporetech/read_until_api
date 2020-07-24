@@ -1,4 +1,3 @@
 grpcio
 requests
-numpy
 minknow-api

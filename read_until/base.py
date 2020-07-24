@@ -14,7 +14,7 @@ except ImportError:
 
 import numpy
 
-import minknow
+import minknow_api
 
 
 if sys.version_info[0] < 3:
@@ -48,6 +48,21 @@ CLASS_MAP = {
         '78': 'unclassed',
     }
 }
+
+
+def _numpy_type(desc):
+    """Convert data type from RPC to numpy"""
+    if desc.type == desc.SIGNED_INTEGER:
+        type_char = "i"
+    elif desc.type == desc.UNSIGNED_INTEGER:
+        type_char = "u"
+    elif desc.type == desc.FLOATING_POINT:
+        type_char = "f"
+    else:
+        raise RuntimeError("Unknown type {}".format(desc))
+
+    type_desc = "{}{}{}".format(">" if desc.big_endian else "<", type_char, desc.size)
+    return numpy.dtype(type_desc)
 
 
 class ReadCache(object):
@@ -151,10 +166,10 @@ def _format_iter(data):
 
 
 # Helper to generate new thread names
-_counter = _count().next
-_counter()
+_counter = _count()
+next(_counter)
 def _new_thread_name(template="read_until-%d"):
-    return template % _counter()
+    return template % next(_counter)
 
 
 # The maximum allowed minimum read chunk size. Filtering of small read chunks
@@ -252,12 +267,11 @@ class ReadUntilClient(object):
 
         self.grpc_port = self.mk_grpc_port
         self.logger.info('Creating rpc connection on port {}.'.format(self.grpc_port))
-        self.connection = minknow.rpc.Connection(host=self.mk_host, port=self.grpc_port)
+        self.connection = minknow_api.Connection(host=self.mk_host, port=self.grpc_port)
         self.logger.info('Got rpc connection.')
         self.msgs = self.connection.data._pb
-        self.device = minknow.Device(self.connection)
 
-        self.signal_dtype = self.device.numpy_data_types.calibrated_signal
+        self.signal_dtype = _numpy_type(self.connection.data.get_data_types().calibrated_signal)
 
         # setup the queues and running status
         self._process_thread = None
@@ -482,8 +496,8 @@ class ReadUntilClient(object):
             #  ii) raw data for current reads
 
             # record a count of success and fails            
-            if len(reads_chunk.action_reponses):
-                for response in reads_chunk.action_reponses:
+            if len(reads_chunk.action_responses):
+                for response in reads_chunk.action_responses:
                     action_type = self.sent_actions[response.action_id]
                     response_counter[action_type][response.response] += 1
 
