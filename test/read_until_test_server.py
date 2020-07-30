@@ -94,6 +94,11 @@ class DataService(data_pb2_grpc.DataServiceServicer):
                 big_endian=False,
                 size=2,
             ),
+            bias_voltages=data_pb2.GetDataTypesResponse.DataType(
+                type=data_pb2.GetDataTypesResponse.DataType.SIGNED_INTEGER,
+                big_endian=False,
+                size=2,
+            ),
         )
 
     def get_live_reads(self, request_iterator, _context):

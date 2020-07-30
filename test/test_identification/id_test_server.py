@@ -2,23 +2,24 @@
 
 import argparse
 import logging
+import random
 import sys
 import tempfile
+import time
+from pathlib import Path
 from shutil import which
 from threading import Thread
-import time
-import random
 from uuid import uuid4
-from pathlib import Path
 
 import numpy as np
-
 from minknow_api import (
     data_pb2,
     data_pb2_grpc,
 )
-from ..read_until_test_server import ReadUntilTestServer, AnalysisConfigurationService, AcquisitionService, DeviceService
+
+from ..read_until_test_server import ReadUntilTestServer
 from ..test_utils import run_server
+
 # from minknow_api.testutils import MockMinKNOWServer
 
 DIR = Path(__file__).parent.resolve()
@@ -69,7 +70,6 @@ class DataService(data_pb2_grpc.DataServiceServicer):
         self.sent_batches = 0
         self.sent_reads = 0
         self.test_read = open(str(DIR / "test_read.b"), "rb").read()
-
 
     def _read_data_generator(self):
         """Generate a (channel, ReadData) tuple, using random numbers
@@ -151,6 +151,11 @@ class DataService(data_pb2_grpc.DataServiceServicer):
                 big_endian=False,
                 size=2,
             ),
+            bias_voltages=data_pb2.GetDataTypesResponse.DataType(
+                type=data_pb2.GetDataTypesResponse.DataType.SIGNED_INTEGER,
+                big_endian=False,
+                size=2,
+            ),
         )
 
     def get_live_reads(self, request_iterator, context):
@@ -192,10 +197,7 @@ def main():
 
     args = parser.parse_args()
     # Create a gRPC server
-    server = ReadUntilTestServer(
-        args.port,
-        data_service=DataService,
-    )
+    server = ReadUntilTestServer(args.port, data_service=DataService,)
 
     # Add a response for a user to receive
     # server.data_service.add_response(data_pb2.GetLiveReadsResponse())
@@ -207,7 +209,7 @@ def main():
                 logging.warning("guppy_basecall_server not found")
 
             log_path = tempfile.mkdtemp()
-            config = 'dna_r9.4.1_450bps_fast.cfg'
+            config = "dna_r9.4.1_450bps_fast.cfg"
 
             opts = [
                 "--config",
@@ -216,7 +218,7 @@ def main():
                 str(args.g),
                 "--log_path",
                 log_path,
-                "--disable_pings"
+                "--disable_pings",
             ]
 
             guppy_server, guppy_port = run_server(GUPPY_EXEC, opts)

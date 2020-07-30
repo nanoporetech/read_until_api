@@ -15,25 +15,10 @@ from threading import Event, Thread
 from typing import Set
 
 from minknow_api import data_pb2, Connection
+from minknow_api.data import get_numpy_types
 from read_until.read_cache import ReadCache
 
 __all__ = ["ReadUntilClient"]
-
-
-def _numpy_type(desc):
-    """Convert a description of a type provided by the data.get_data_types() RPC into a numpy dtype
-    object."""
-
-    if desc.type == desc.SIGNED_INTEGER:
-        type_char = "i"
-    elif desc.type == desc.UNSIGNED_INTEGER:
-        type_char = "u"
-    elif desc.type == desc.FLOATING_POINT:
-        type_char = "f"
-    else:
-        raise RuntimeError("Unknown type format {}".format(desc))
-    type_desc = "{}{}{}".format(">" if desc.big_endian else "<", type_char, desc.size)
-    return numpy.dtype(type_desc)
 
 
 def nice_join(seq, sep=", ", conjunction="or"):
@@ -144,8 +129,6 @@ class ReadUntilClient(object):
 
         # class type to use for caching reads
         self.CacheType = cache_type  # pylint: disable=invalid-name
-        # TODO: we could add a check here that the cache is inherited from
-        #       the base ReadCache/make sure it has the needed methods?
         self.filter_strands = filter_strands
         self.one_chunk = one_chunk
         self.prefilter_classes = prefilter_classes
@@ -182,11 +165,6 @@ class ReadUntilClient(object):
         offsets = self.calibration_data.offsets
         digi = self.calibration_data.digitisation
 
-        # FIXME: Getting the calibration seems a little shaky should
-        #        these values be provided as a map<int CalibrationData>
-        #        or something like that?
-        # FIXME: offsets and pa_ranges size should match channel_count?
-
         self.calibration_values = {
             ch: CALIBRATION(rng / digi, offset)
             for ch, (rng, offset) in enumerate(zip(ranges, offsets), start=1)
@@ -216,14 +194,10 @@ class ReadUntilClient(object):
 
         if calibrated_signal:
             self.calibration = data_pb2.GetLiveReadsRequest.CALIBRATED
-            self.signal_dtype = _numpy_type(
-                self.connection.data.get_data_types().calibrated_signal
-            )
+            self.signal_dtype = get_numpy_types(self.connection).calibrated_signal
         else:
             self.calibration = data_pb2.GetLiveReadsRequest.UNCALIBRATED
-            self.signal_dtype = _numpy_type(
-                self.connection.data.get_data_types().uncalibrated_signal
-            )
+            self.signal_dtype = get_numpy_types(self.connection).uncalibrated_signal
 
         # setup the queues and running status
         self._process_thread = None
