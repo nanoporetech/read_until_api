@@ -16,7 +16,7 @@ check.version:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install ${ONT_PYPI} -r requirements.txt --pre
+    - pip install ${ONT_PYPI} -r requirements.txt
     - python setup.py install
     - ru_version=$( python -c "import read_until; print(read_until.__version__)" 2>&1 )
     - tag_version="${CI_BUILD_REF_NAME/#v/}"
@@ -37,7 +37,7 @@ check.pylint:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install ${ONT_PYPI} -r requirements.txt --pre
+    - pip install ${ONT_PYPI} -r requirements.txt
     - pip install -r dev-requirements.txt
     - python setup.py install
     - ignore_pattern=".*pb2.*"
@@ -52,7 +52,7 @@ check.docs:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install ${ONT_PYPI} -r requirements.txt --pre
+    - pip install ${ONT_PYPI} -r requirements.txt
     - pip install ${ONT_PYPI} ${PYGUPPY_INSTALL}
     - pip install -r dev-requirements.txt
     - python setup.py install
@@ -65,7 +65,7 @@ check.docs:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - pip install ${ONT_PYPI} -r requirements.txt --pre
+    - pip install ${ONT_PYPI} -r requirements.txt
     - pip install -r dev-requirements.txt
     - python setup.py develop
     - pytest --cov=read_until --cov-report html:cov_html --cov-report term --junitxml=./junit.xml test/test_*.py
@@ -100,7 +100,7 @@ test_id_example:
         tar -xf guppy.tar.gz;
         export PATH=${PWD}/ont-guppy-cpu/bin:${PWD}/ont-guppy/bin:$PATH;
       fi
-    - pip install ${ONT_PYPI} -r requirements.txt --pre
+    - pip install ${ONT_PYPI} -r requirements.txt
     - pip install ${ONT_PYPI} ${PYGUPPY_INSTALL}
     - pip install -r dev-requirements.txt
     - python setup.py develop
