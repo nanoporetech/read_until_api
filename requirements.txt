@@ -1,2 +1,2 @@
 numpy==1.17.4
-minknow-api>=4.1.0a1
+minknow-api>=4.1.0
