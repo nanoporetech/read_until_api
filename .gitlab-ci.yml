@@ -3,8 +3,8 @@ variables:
   GIT_SUBMODULE_STRATEGY: recursive
   GUPPY_VERSION: 4.1.2
   PYGUPPY_INSTALL: ont-pyguppy-client-lib==${GUPPY_VERSION}
-  GUPPY_ARCHIVE: https://artifactory.oxfordnanolabs.local:443/artifactory/OFAN-General/release/${GUPPY_VERSION}/ont-guppy-cpu_${GUPPY_VERSION}_linux64.tar.gz
-  ONT_PYPI: "--extra-index-url https://artifactory.oxfordnanolabs.local/artifactory/api/pypi/ONT-Pypi/simple --trusted-host artifactory.oxfordnanolabs.local"
+  GUPPY_ARCHIVE: ${ARTIFACTORY_URL}/artifactory/OFAN-General/release/${GUPPY_VERSION}/ont-guppy-cpu_${GUPPY_VERSION}_linux64.tar.gz
+  ONT_PYPI: "--extra-index-url ${ARTIFACTORY_URL}/artifactory/api/pypi/ONT-Pypi/simple --trusted-host ${ARTIFACTORY_HOST}"
 
 stages:
   - check
