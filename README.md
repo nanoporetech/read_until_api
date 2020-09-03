@@ -58,7 +58,7 @@ Two demonstration programs are provided:
        for developers.
    2.  `read_until_ident`: this is a more fully featured example, using
        the API to identify reads via basecalling and alignment. To run it
-       requires the optional dependency `pyguppy_client_lib`. 
+       requires the optional dependency `ont-pyguppy-client-lib` (https://pypi.org/project/ont-pyguppy-client-lib/).
 
 Client Overview
 ---------------
