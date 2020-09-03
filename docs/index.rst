@@ -19,7 +19,7 @@ Two demonstration programs are provided in the ``examples`` directory:
        (read_until.simple).
    ii) read_until_ident: this is a more fully-featured example of the
        API to identify reads via base-calling and alignment. To run it
-       requires the optional dependency ``pyguppy_client_lib``.
+       requires the optional dependency ``ont-pyguppy-client-lib`` (see https://pypi.org/project/ont-pyguppy-client-lib/).
 
 
 Full API reference

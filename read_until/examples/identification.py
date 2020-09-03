@@ -1,13 +1,17 @@
 """Example of using pyguppy_client_lib with read until"""
 import argparse
 import logging
+import sys
 import time
 
 import numpy as np
 
 from read_until import AccumulatingCache, ReadUntilClient
-from pyguppy_client_lib.pyclient import PyGuppyClient
-from pyguppy_client_lib.helper_functions import package_read
+try:
+    from pyguppy_client_lib.pyclient import PyGuppyClient
+    from pyguppy_client_lib.helper_functions import package_read
+except ImportError:
+    print("Failed to import pyguppy_client_lib, do you need to `pip install ont-pyguppy-client-lib`", file=sys.stderr)
 
 
 def basecall(
