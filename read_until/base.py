@@ -211,12 +211,23 @@ class ReadUntilClient(object):
         server, processing it into the data_queue (ReadCache) and also sends
         responses (`unblock` and `stop_receiving`).
 
+        The keyword arguments ``max_unblock_read_length_seconds`` and
+        ``max_unblock_read_length_samples`` are mutually exclusive and will raise a
+        ValueError if both are set. Setting either to ``0`` will cause MinKNOW to
+        unblock reads of any length. The default is to allow unblocks of any length.
+
         :keyword first_channel: First channel to monitor
         :keyword last_channel: Last channel to monitor.
         :keyword min_chunk_size: Minimum number of raw samples in a raw data chunk.
+        :keyword max_unblock_read_length_samples: Maximum read length MinKNOW
+            will attempt to unblock in samples.
+        :keyword max_unblock_read_length_seconds: Maximum read length MinKNOW
+            will attempt to unblock in seconds
         :type first_channel: int
         :type last_channel: int
         :type min_chunk_size: int
+        :type max_unblock_read_length_samples: int
+        :type max_unblock_read_length_seconds: float
         """
         self._process_thread = Thread(
             target=self._run, name=_new_thread_name(), kwargs=kwargs
@@ -400,6 +411,8 @@ class ReadUntilClient(object):
         first_channel=None,
         last_channel=None,
         min_chunk_size=ALLOWED_MIN_CHUNK_SIZE,
+        max_unblock_read_length_samples=None,
+        max_unblock_read_length_seconds=None,
     ):
         """Yield the stream initializer request followed by action requests
         placed into the action_queue.
@@ -407,7 +420,13 @@ class ReadUntilClient(object):
         :param first_channel: lowest channel for which to receive raw data.
         :param last_channel: highest channel (inclusive) for which to receive data.
         :param min_chunk_size: minimum number of raw samples in a raw data chunk.
+        :param max_unblock_read_length_samples: Maximum read length MinKNOW will
+            attempt to unblock (in samples).
+        :param max_unblock_read_length_seconds: Maximum read length MinKNOW will
+            attempt to unblock (in seconds).
+
         """
+        setup = {}
         # This allows the channels to default to all available channels on the
         #   device and lets current users keep access to subsets of the device
         if first_channel is None:
@@ -415,10 +434,31 @@ class ReadUntilClient(object):
         if last_channel is None:
             last_channel = self.last_channel
 
+        setup["first_channel"] = first_channel
+        setup["last_channel"] = last_channel
+
         # see note at top of this module
         if min_chunk_size > ALLOWED_MIN_CHUNK_SIZE:
             self.logger.warning("Reducing min_chunk_size to %s", ALLOWED_MIN_CHUNK_SIZE)
             min_chunk_size = ALLOWED_MIN_CHUNK_SIZE
+
+        setup["sample_minimum_chunk_size"] = min_chunk_size
+
+        # If both max unblock are set, raise value error
+        if (
+            max_unblock_read_length_samples is not None
+            and max_unblock_read_length_seconds is not None
+        ):
+            raise ValueError(
+                "'max_unblock_read_length_samples' and 'max_unblock_read_length_seconds'"
+                " are mutually exclusive"
+            )
+        elif max_unblock_read_length_samples is not None:
+            setup["max_unblock_read_length_samples"] = max_unblock_read_length_samples
+        elif max_unblock_read_length_seconds is not None:
+            setup["max_unblock_read_length_seconds"] = max_unblock_read_length_seconds
+        else:
+            setup["max_unblock_read_length_samples"] = 0
 
         self.logger.info(
             "Sending init command, channels:%s-%s, min_chunk:%s",
@@ -427,12 +467,7 @@ class ReadUntilClient(object):
             min_chunk_size,
         )
         yield data_pb2.GetLiveReadsRequest(
-            setup=data_pb2.GetLiveReadsRequest.StreamSetup(
-                first_channel=first_channel,
-                last_channel=last_channel,
-                raw_data_type=self.calibration,
-                sample_minimum_chunk_size=min_chunk_size,
-            )
+            setup=data_pb2.GetLiveReadsRequest.StreamSetup(**setup)
         )
 
         while self.is_running:
