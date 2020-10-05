@@ -538,7 +538,8 @@ class ReadUntilClient(object):
                     self.data_queue[read_channel] = read
 
             now = time.time()
-            if last_msg_time + 1 < now:
+            log_interval_secs = 60 * 15 # 15 mins
+            if last_msg_time + log_interval_secs < now:
                 self.logger.info(
                     "Interval update: %s read sections, %s unique reads (ever), "
                     "average %.0f samples behind. %.2f MB raw data, "
