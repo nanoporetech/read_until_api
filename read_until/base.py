@@ -134,7 +134,7 @@ class ReadUntilClient(object):
         self.prefilter_classes = prefilter_classes
 
         try:
-            self.connection = Connection(self.mk_grpc_port)
+            self.connection = Connection(host=self.mk_host, port=self.mk_grpc_port)
         except:
             # FIXME: Broad exception
             logging.error(
