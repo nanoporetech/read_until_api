@@ -1,0 +1,13 @@
+language: python
+python:
+- '3.6'
+install:
+- pip install -r dev-requirements.txt
+- pip install .
+script:
+- pytest test/test_*.py
+deploy:
+  provider: pypi
+  user: __token__
+  password:
+    secure: pjLrsos3OuKt0K1a7MvPqzuw9q9qCXcBvSXfQe71PDSCc/OzMBl9Z1saFfkaMF8ys8J0IawqqvrVIR5zQbxis2hrEQMvdBmbEvymuwTgPD4+2/Bx8ws+unKyJSj8c5cZglf+kKH5ZOkfAsKuRY1Lppu/MQ8DY5FkTNTNFe92fcehPbhrlUQRcE3+NR+Y4ueDeD/PwCMt7zONcuVrqAmU128LqOpDdN1sTuepQm5jPX2J9M8QUS1+67AlxkjZI8irKli7hUmI4sYgI5yFL2uzflj93MI4PXuQy7D/WnadgLCCyTy9eh4v4K3dj6dgR8GqQM9Z+Ja5LCcwe89x4tbJi+RiD6O79CLgr6jlxF76fBDf4lW+YHYfVheh8wVgZ2vDLuY9DfQ7bJJc+fmb9cMscJ41aQ+jht7asC2iGKsL9nlMr3+1GVsWHGpN1LOKY+mKyB5SULvNqFhAXw9mhgbOe74RJRMcAF0pq98M5+3vb+sZ49bU7CFqlINboFIoKjkMiCic73m6Dug9mpqQ/rxJ0/8WpO/JcH82FFVtU0t86KIhJW/U2ww6fG5uYwGXKRusVi8yViyuiMxE7yKMcKIRCtfgI+Av/H9ZZdBeX/9PCvo726eaokd6el48MSe9zDvGPscUmPVwMMF2igD7ccKUptqx68FdEGsyq8bG+iSbsyk=
