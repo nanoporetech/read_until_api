@@ -31,11 +31,15 @@ def test_bad_setup():
             )
 
 
-def test_setup():
+@pytest.mark.parametrize("calibrated,expected_calibrated", [
+    (True, data_pb2.GetLiveReadsRequest.CALIBRATED),
+    (False, data_pb2.GetLiveReadsRequest.UNCALIBRATED)
+])
+def test_setup(calibrated, expected_calibrated):
     """Test client setup messages"""
     test_server = ReadUntilTestServer()
     test_server.start()
-    client = read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port)
+    client = read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port, calibrated_signal=calibrated)
 
     try:
         client.run(first_channel=4, last_channel=100)
@@ -44,6 +48,7 @@ def test_setup():
         assert test_server.data_service.live_reads_requests
         assert test_server.data_service.live_reads_requests[0].setup.first_channel == 4
         assert test_server.data_service.live_reads_requests[0].setup.last_channel == 100
+        assert test_server.data_service.live_reads_requests[0].setup.raw_data_type == expected_calibrated
 
     finally:
         client.reset()

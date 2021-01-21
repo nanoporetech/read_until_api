@@ -436,6 +436,7 @@ class ReadUntilClient(object):
 
         setup["first_channel"] = first_channel
         setup["last_channel"] = last_channel
+        setup["raw_data_type"] = self.calibration
 
         # see note at top of this module
         if min_chunk_size > ALLOWED_MIN_CHUNK_SIZE:
