@@ -1,27 +1,34 @@
 """Testing for example code"""
 
 import logging
+from minknow_api import data_pb2, Connection
+import numpy
 import random
 import sys
 from threading import Thread
 import time
-
-import numpy
+from unittest.mock import patch
 
 import read_until.examples.simple
-
-from minknow_api import data_pb2
-
 from .read_until_test_server import ReadUntilTestServer
 
 
-def test_example_simple():
+def fake_connection(**kwargs):
+    kwargs["use_tls"] = False
+    return Connection(**kwargs)
+
+
+@patch("read_until.examples.simple.read_until.base.Connection")
+def test_example_simple(mock_connection):
     """Test simple example runs and produces actions on all reads"""
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
     test_server = ReadUntilTestServer()
     test_server.start()
 
+    mock_connection.side_effect = fake_connection
+
     def example_main(test_server):
+
         read_until.examples.simple.main(
             ["--host", "localhost", "--port", str(test_server.port), "--run_time", "30"]
         )
@@ -85,11 +92,14 @@ def test_example_simple():
     test_server.stop(0)
 
 
-def test_example_simple_random():
+@patch("read_until.examples.simple.read_until.base.Connection")
+def test_example_simple_random(mock_connection):
     """Test simple example runs and produces actions on all reads"""
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
     test_server = ReadUntilTestServer()
     test_server.start()
+
+    mock_connection.side_effect = fake_connection
 
     def example_main(test_server):
         read_until.examples.simple.main(
