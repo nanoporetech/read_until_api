@@ -1,15 +1,22 @@
+from minknow_api import Connection
 from shutil import which, rmtree
 import tempfile
 import logging
 import time
 import unittest
 from threading import Thread
+from unittest.mock import patch
 
 import read_until.examples.identification
 
 from ..test_utils import run_server
 from ..read_until_test_server import ReadUntilTestServer
 from .id_test_server import DataService, DIR
+
+
+def fake_connection(**kwargs):
+    kwargs["use_tls"] = False
+    return Connection(**kwargs)
 
 
 class TestBaseCallModule(unittest.TestCase):
@@ -54,7 +61,10 @@ class TestBaseCallModule(unittest.TestCase):
         self.guppy_server.wait()
         rmtree(self.log_path)
 
-    def test_identification(self):
+    @patch("read_until.base.Connection")
+    def test_identification(self, mock_connection):
+        mock_connection.side_effect = fake_connection
+
         def run_main(gport, mport):
             read_until.examples.identification.main(
                 [
