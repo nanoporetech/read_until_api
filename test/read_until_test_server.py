@@ -66,6 +66,7 @@ class DataService(data_pb2_grpc.DataServiceServicer):
         self.live_reads_responses_to_send = Queue()
         self._live_reads_terminate = Queue()
         self.live_reads_requests = []
+        self.live_reads_responses = []
 
         self.channel_data = {}
 
@@ -127,6 +128,8 @@ class DataService(data_pb2_grpc.DataServiceServicer):
             try:
                 # Send responses as the queue is filled.
                 resp = self.live_reads_responses_to_send.get(timeout=0.1)
+                if resp:
+                    self.live_reads_responses.append(resp)
                 for channel, reads in resp.channels.items():
                     self._add_channel_data(channel, reads)
                 yield resp
