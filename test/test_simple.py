@@ -106,3 +106,67 @@ def test_response():
 
     assert test_server.data_service.find_response_times()[0] < 0.05  # 50ms round trip
     test_server.stop(0)
+
+
+def test_response_reads_after_unblock():
+    """Test client response for receiving more read chunks after a decision has been made"""
+    test_server = ReadUntilTestServer()
+    test_server.start()
+
+    def add_read(channel, read_number):
+        input_read_response = data_pb2.GetLiveReadsResponse.ReadData(
+            id="test-read",
+            number=read_number,
+            start_sample=0,
+            chunk_start_sample=0,
+            chunk_length=100,
+            chunk_classifications=[83],
+            raw_data=numpy.random.random(100).astype(dtype="f4").tobytes(),
+            median_before=100,
+            median=150,
+        )
+
+        test_server.data_service.add_response(
+            data_pb2.GetLiveReadsResponse(channels={channel: input_read_response})
+        )
+
+    client = read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port, use_tls=False, one_chunk=False)
+
+    try:
+        client.run(first_channel=1, last_channel=2)
+
+        add_read(channel=1, read_number=1)
+        wait_until(lambda: len(test_server.data_service.live_reads_requests) >= 1)
+
+        read_chunk_received = False
+        done = False
+        while not done:
+            for channel, read in client.get_read_chunks():
+                if channel == 1 and read.number == 1:
+                    assert not read_chunk_received
+                    read_chunk_received = True
+
+                    client.unblock_read(channel, read.number)
+                    # Trigger a later read on this channel which shouldn't be received
+                    add_read(channel=1, read_number=1)
+                    # And one to kick the next loop off
+                    add_read(channel=2, read_number=1)
+
+                    wait_until(lambda: len(test_server.data_service.live_reads_responses) >= 3)
+
+                if channel == 2 and read.number == 1:
+                    # Make sure new ones come through after unblock
+                    add_read(channel=1, read_number=2)
+                    wait_until(lambda: len(test_server.data_service.live_reads_responses) >= 4)
+
+                if channel == 1 and read.number == 2:
+                    done = True
+
+
+        # Check that the read isn't still waiting
+        assert client.get_read_chunks() == []
+
+    finally:
+        client.reset()
+
+    test_server.stop(0)
