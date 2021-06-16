@@ -134,6 +134,9 @@ class ReadUntilClient(object):
         self.one_chunk = one_chunk
         self.prefilter_classes = prefilter_classes
 
+        # Stores the most recent read number that a decision has been made on (stop_receiving/unblock)
+        self.channel_read_latest_decision = defaultdict(int)
+
         try:
             self.connection = Connection(
                 host=self.mk_host, port=self.mk_grpc_port, use_tls=use_tls
@@ -261,6 +264,9 @@ class ReadUntilClient(object):
         # the action_queue is used to store unblock/stop_receiving_data
         #    requests before they are put on the gRPC stream.
         self.action_queue = queue.Queue()
+
+        self.channel_read_latest_decision = defaultdict(int)
+
         # the data_queue is used to store the latest chunk per channel
         self.data_queue = self.CacheType(size=self.cache_size)
         # stores all sent action ids -> unblock/stop
@@ -315,6 +321,9 @@ class ReadUntilClient(object):
         ``(channel, ReadData)``. Where ``ReadData`` is an instance of
         ``minknow_api.data.GetLiveReadsResponse.ReadData``.
 
+        Note that if one_chunk isn't set and a decision has already been made or requested to be made
+        you won't receive data for that read
+
         :param batch_size: Maximum number of reads to return
         :type batch_size: int
         :param last: If ``True`` get newest entries (LIFO), if ``False`` get
@@ -325,7 +334,15 @@ class ReadUntilClient(object):
         :rtype: list
 
         """
-        return self.data_queue.popitems(items=batch_size, last=last)
+        data = self.data_queue.popitems(items=batch_size, last=last)
+
+        if not self.one_chunk:
+            data = [
+                (channel, read)
+                for (channel, read) in data
+                if read.number > self.channel_read_latest_decision[channel]
+            ]
+        return data
 
     def unblock_read_batch(self, reads, duration=0.1):
         """Request for a bunch of reads be unblocked.
@@ -344,6 +361,10 @@ class ReadUntilClient(object):
             self._generate_action(channel, read, "unblock", duration=duration)
             for (channel, read) in reads
         ]
+        if not self.one_chunk:
+            # Decision about to be made so update cache
+            self.channel_read_latest_decision.update(reads)
+
         self.action_queue.put(actions)
 
     def unblock_read(self, read_channel, read_number, duration=0.1):
@@ -375,6 +396,11 @@ class ReadUntilClient(object):
             self._generate_action(channel, read, "stop_further_data")
             for (channel, read) in reads
         ]
+
+        if not self.one_chunk:
+            # Decision about to be made so update cache
+            self.channel_read_latest_decision.update(reads)
+
         self.action_queue.put(actions)
 
     def stop_receiving_read(self, read_channel, read_number):
