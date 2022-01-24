@@ -14,10 +14,6 @@ from ..read_until_test_server import ReadUntilTestServer
 from .id_test_server import DataService, DIR
 
 
-def fake_connection(**kwargs):
-    kwargs["use_tls"] = False
-    return Connection(**kwargs)
-
 
 class TestBaseCallModule(unittest.TestCase):
     def setUp(self):
@@ -53,7 +49,6 @@ class TestBaseCallModule(unittest.TestCase):
         # Allow servers time to start up
         time.sleep(2)
 
-
     def tearDown(self):
         self.minknow_server.stop(0)
         self.guppy_server.stdout.close()
@@ -61,9 +56,7 @@ class TestBaseCallModule(unittest.TestCase):
         self.guppy_server.wait()
         rmtree(self.log_path)
 
-    @patch("read_until.base.Connection")
-    def test_identification(self, mock_connection):
-        mock_connection.side_effect = fake_connection
+    def test_identification(self):
 
         def run_main(gport, mport):
             read_until.examples.identification.main(

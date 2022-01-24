@@ -13,19 +13,11 @@ import read_until.examples.simple
 from .read_until_test_server import ReadUntilTestServer
 
 
-def fake_connection(**kwargs):
-    kwargs["use_tls"] = False
-    return Connection(**kwargs)
-
-
-@patch("read_until.examples.simple.read_until.base.Connection")
-def test_example_simple(mock_connection):
+def test_example_simple():
     """Test simple example runs and produces actions on all reads"""
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
     test_server = ReadUntilTestServer()
     test_server.start()
-
-    mock_connection.side_effect = fake_connection
 
     def example_main(test_server):
 
@@ -92,14 +84,11 @@ def test_example_simple(mock_connection):
     test_server.stop(0)
 
 
-@patch("read_until.examples.simple.read_until.base.Connection")
-def test_example_simple_random(mock_connection):
+def test_example_simple_random():
     """Test simple example runs and produces actions on all reads"""
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
     test_server = ReadUntilTestServer()
     test_server.start()
-
-    mock_connection.side_effect = fake_connection
 
     def example_main(test_server):
         read_until.examples.simple.main(

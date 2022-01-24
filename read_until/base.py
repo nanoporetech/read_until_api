@@ -116,7 +116,6 @@ class ReadUntilClient(object):
         self,
         mk_host: str = "127.0.0.1",
         mk_port: int = 8000,
-        use_tls: bool = True,
         cache_type: ReadCache = ReadCache,
         filter_strands: bool = True,
         one_chunk: bool = True,
@@ -138,16 +137,13 @@ class ReadUntilClient(object):
         self.channel_read_latest_decision = defaultdict(int)
 
         try:
-            self.connection = Connection(
-                host=self.mk_host, port=self.mk_grpc_port, use_tls=use_tls
-            )
+            self.connection = Connection(host=self.mk_host, port=self.mk_grpc_port)
         except:
             # FIXME: Broad exception
             logging.error(
-                "Failed to connect to read until at %s: %s (use_tls=%s)",
+                "Failed to connect to read until at %s: %s",
                 self.mk_host,
                 self.mk_grpc_port,
-                use_tls,
             )
             raise
         self.logger.info("Got rpc connection.")
