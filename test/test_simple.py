@@ -19,7 +19,6 @@ def test_bad_setup():
         with pytest.raises(Exception):
             read_until.ReadUntilClient(
                 mk_host="localhost", mk_port=test_server.port + 1,
-                use_tls=False
             )
 
         # Bad prefilter_classes input
@@ -29,7 +28,6 @@ def test_bad_setup():
                 mk_port=test_server.port,
                 filter_strands=True,
                 prefilter_classes=4,
-                use_tls=False
             )
 
 
@@ -41,7 +39,7 @@ def test_setup(calibrated, expected_calibrated):
     """Test client setup messages"""
     test_server = ReadUntilTestServer()
     test_server.start()
-    client = read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port, calibrated_signal=calibrated, use_tls=False)
+    client = read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port, calibrated_signal=calibrated)
 
     try:
         client.run(first_channel=4, last_channel=100)
@@ -78,7 +76,7 @@ def test_response():
         data_pb2.GetLiveReadsResponse(channels={input_channel: input_read_response})
     )
 
-    client = read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port, use_tls=False)
+    client = read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port)
 
     try:
         client.run(first_channel=4, last_channel=100)
@@ -130,7 +128,7 @@ def test_response_reads_after_unblock():
             data_pb2.GetLiveReadsResponse(channels={channel: input_read_response})
         )
 
-    client = read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port, use_tls=False, one_chunk=False)
+    client = read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port, one_chunk=False)
 
     try:
         client.run(first_channel=1, last_channel=2)
