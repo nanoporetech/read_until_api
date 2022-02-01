@@ -1,9 +1,11 @@
 """Example of using pyguppy_client_lib with read until"""
 import argparse
 import logging
+from pathlib import Path
 import sys
 import time
 
+import grpc
 import numpy as np
 
 from read_until import AccumulatingCache, ReadUntilClient
@@ -85,6 +87,12 @@ def get_parser():
     )
     parser.add_argument(
         "--port", type=int, default=8000, help="MinKNOW gRPC server port"
+    )
+    parser.add_argument(
+        "--ca-cert",
+        type=Path,
+        default=None,
+        help="Path to alternate CA certificate for connecting to MinKNOW.",
     )
 
     parser.add_argument(
@@ -195,9 +203,15 @@ def main(argv=None):
         format="[%(asctime)s - %(name)s] %(message)s", level=logging.INFO,
     )
 
+    channel_credentials = None
+    if args.ca_cert is not None:
+        channel_credentials = grpc.ssl_channel_credentials(
+            root_certificates=args.ca_cert.read_bytes()
+        )
     read_until_client = ReadUntilClient(
         mk_host=args.host,
         mk_port=args.port,
+        mk_credentials=channel_credentials,
         cache_type=AccumulatingCache,
         one_chunk=False,
         filter_strands=True,

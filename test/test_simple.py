@@ -18,7 +18,9 @@ def test_bad_setup():
         # Bad port
         with pytest.raises(Exception):
             read_until.ReadUntilClient(
-                mk_host="localhost", mk_port=test_server.port + 1,
+                mk_host="localhost",
+                mk_port=test_server.port + 1,
+                mk_credentials=test_server.channel_credentials,
             )
 
         # Bad prefilter_classes input
@@ -28,6 +30,7 @@ def test_bad_setup():
                 mk_port=test_server.port,
                 filter_strands=True,
                 prefilter_classes=4,
+                mk_credentials=test_server.channel_credentials,
             )
 
 
@@ -43,7 +46,10 @@ def test_setup(calibrated, expected_calibrated):
     test_server = ReadUntilTestServer()
     test_server.start()
     client = read_until.ReadUntilClient(
-        mk_host="localhost", mk_port=test_server.port, calibrated_signal=calibrated
+        mk_host="localhost",
+        mk_port=test_server.port,
+        calibrated_signal=calibrated,
+        mk_credentials=test_server.channel_credentials,
     )
 
     try:
@@ -84,7 +90,11 @@ def test_response():
         data_pb2.GetLiveReadsResponse(channels={input_channel: input_read_response})
     )
 
-    client = read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port)
+    client = read_until.ReadUntilClient(
+        mk_host="localhost",
+        mk_port=test_server.port,
+        mk_credentials=test_server.channel_credentials,
+    )
 
     try:
         client.run(first_channel=4, last_channel=100)
@@ -137,7 +147,10 @@ def test_response_reads_after_unblock():
         )
 
     client = read_until.ReadUntilClient(
-        mk_host="localhost", mk_port=test_server.port, one_chunk=False
+        mk_host="localhost",
+        mk_port=test_server.port,
+        one_chunk=False,
+        mk_credentials=test_server.channel_credentials,
     )
 
     try:

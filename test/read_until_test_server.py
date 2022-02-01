@@ -20,7 +20,7 @@ from minknow_api import (
     device_pb2,
     device_pb2_grpc,
 )
-from minknow_api.testutils import MockMinKNOWServer
+from minknow_api.testutils import MockMinKNOWServer, find_test_certs_dir
 
 
 LOGGER = logging.getLogger(__name__)
@@ -227,6 +227,10 @@ class ReadUntilTestServer(MockMinKNOWServer):
         )
         kwargs = {**defaults, **kwargs}
         super().__init__(port, **kwargs)
+        self.ca_cert_path = find_test_certs_dir() / "ca.crt"
+        self.channel_credentials = grpc.ssl_channel_credentials(
+            root_certificates=self.ca_cert_path.read_bytes()
+        )
 
 
 def main():

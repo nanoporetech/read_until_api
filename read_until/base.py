@@ -4,8 +4,8 @@ The base module provides the ``ReadUntilClient`` which is the primary
 connection point between the read_until_api and MinKNOW.
 """
 
+import grpc
 import logging
-import numpy
 import queue
 import time
 import uuid
@@ -77,6 +77,9 @@ class ReadUntilClient(object):
     :param calibrated_signal: Bool, if True request calibrated signal (float32),
         if False request uncalibrated signal (int16)
     :type calibrated_signal: bool
+    :param mk_credentials: The credentials to use when connecting to MinKNOW. See
+        `minknow_api.Connection` for more information.
+    :type mk_credentials: grpc.ChannelCredentials
 
     To set up and use a client:
 
@@ -121,6 +124,7 @@ class ReadUntilClient(object):
         one_chunk: bool = True,
         prefilter_classes: Set[str,] = None,
         calibrated_signal: bool = False,
+        mk_credentials: grpc.ChannelCredentials = None,
     ):
         self.logger = logging.getLogger("ReadUntil")
 
@@ -137,7 +141,9 @@ class ReadUntilClient(object):
         self.channel_read_latest_decision = defaultdict(int)
 
         try:
-            self.connection = Connection(host=self.mk_host, port=self.mk_grpc_port)
+            self.connection = Connection(
+                host=self.mk_host, port=self.mk_grpc_port, credentials=mk_credentials
+            )
         except:
             # FIXME: Broad exception
             logging.error(

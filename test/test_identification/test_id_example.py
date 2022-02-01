@@ -1,11 +1,9 @@
-from minknow_api import Connection
 from shutil import which, rmtree
 import tempfile
 import logging
 import time
 import unittest
 from threading import Thread
-from unittest.mock import patch
 
 import read_until.examples.identification
 
@@ -61,6 +59,8 @@ class TestBaseCallModule(unittest.TestCase):
                 [
                     "--port",
                     str(mport),
+                    "--ca-cert",
+                    str(self.minknow_server.ca_cert_path),
                     "--guppy_port",
                     str(gport),
                     "--run_time",

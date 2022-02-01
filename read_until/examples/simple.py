@@ -4,9 +4,11 @@ import argparse
 import functools
 import logging
 from multiprocessing.pool import ThreadPool
+from pathlib import Path
 import time
 import typing
 
+import grpc
 import numpy
 
 import read_until
@@ -18,6 +20,12 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default="127.0.0.1", help="MinKNOW server host.")
     parser.add_argument(
         "--port", type=int, default=8000, help="MinKNOW gRPC server port."
+    )
+    parser.add_argument(
+        "--ca-cert",
+        type=Path,
+        default=None,
+        help="Path to alternate CA certificate for connecting to MinKNOW.",
     )
     parser.add_argument("--workers", default=1, type=int, help="worker threads.")
     parser.add_argument(
@@ -197,9 +205,15 @@ def main(argv=None):
         level=args.log_level,
     )
 
+    channel_credentials = None
+    if args.ca_cert is not None:
+        channel_credentials = grpc.ssl_channel_credentials(
+            root_certificates=args.ca_cert.read_bytes()
+        )
     read_until_client = read_until.ReadUntilClient(
         mk_host=args.host,
         mk_port=args.port,
+        mk_credentials=channel_credentials,
         one_chunk=args.one_chunk,
         filter_strands=True,
     )
