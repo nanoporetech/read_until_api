@@ -31,15 +31,20 @@ def test_bad_setup():
             )
 
 
-@pytest.mark.parametrize("calibrated,expected_calibrated", [
-    (True, data_pb2.GetLiveReadsRequest.CALIBRATED),
-    (False, data_pb2.GetLiveReadsRequest.UNCALIBRATED)
-])
+@pytest.mark.parametrize(
+    "calibrated,expected_calibrated",
+    [
+        (True, data_pb2.GetLiveReadsRequest.CALIBRATED),
+        (False, data_pb2.GetLiveReadsRequest.UNCALIBRATED),
+    ],
+)
 def test_setup(calibrated, expected_calibrated):
     """Test client setup messages"""
     test_server = ReadUntilTestServer()
     test_server.start()
-    client = read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port, calibrated_signal=calibrated)
+    client = read_until.ReadUntilClient(
+        mk_host="localhost", mk_port=test_server.port, calibrated_signal=calibrated
+    )
 
     try:
         client.run(first_channel=4, last_channel=100)
@@ -48,7 +53,10 @@ def test_setup(calibrated, expected_calibrated):
         assert test_server.data_service.live_reads_requests
         assert test_server.data_service.live_reads_requests[0].setup.first_channel == 4
         assert test_server.data_service.live_reads_requests[0].setup.last_channel == 100
-        assert test_server.data_service.live_reads_requests[0].setup.raw_data_type == expected_calibrated
+        assert (
+            test_server.data_service.live_reads_requests[0].setup.raw_data_type
+            == expected_calibrated
+        )
 
     finally:
         client.reset()
@@ -128,7 +136,9 @@ def test_response_reads_after_unblock():
             data_pb2.GetLiveReadsResponse(channels={channel: input_read_response})
         )
 
-    client = read_until.ReadUntilClient(mk_host="localhost", mk_port=test_server.port, one_chunk=False)
+    client = read_until.ReadUntilClient(
+        mk_host="localhost", mk_port=test_server.port, one_chunk=False
+    )
 
     try:
         client.run(first_channel=1, last_channel=2)
@@ -150,16 +160,19 @@ def test_response_reads_after_unblock():
                     # And one to kick the next loop off
                     add_read(channel=2, read_number=1)
 
-                    wait_until(lambda: len(test_server.data_service.live_reads_responses) >= 3)
+                    wait_until(
+                        lambda: len(test_server.data_service.live_reads_responses) >= 3
+                    )
 
                 if channel == 2 and read.number == 1:
                     # Make sure new ones come through after unblock
                     add_read(channel=1, read_number=2)
-                    wait_until(lambda: len(test_server.data_service.live_reads_responses) >= 4)
+                    wait_until(
+                        lambda: len(test_server.data_service.live_reads_responses) >= 4
+                    )
 
                 if channel == 1 and read.number == 2:
                     done = True
-
 
         # Check that the read isn't still waiting
         assert client.get_read_chunks() == []

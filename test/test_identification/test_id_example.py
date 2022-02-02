@@ -14,7 +14,6 @@ from ..read_until_test_server import ReadUntilTestServer
 from .id_test_server import DataService, DIR
 
 
-
 class TestBaseCallModule(unittest.TestCase):
     def setUp(self):
         logging.basicConfig(level=logging.DEBUG)
@@ -23,7 +22,7 @@ class TestBaseCallModule(unittest.TestCase):
             self.skipTest("guppy_basecall_server not found")
 
         self.log_path = tempfile.mkdtemp()
-        self.config = 'dna_r9.4.1_450bps_fast.cfg'
+        self.config = "dna_r9.4.1_450bps_fast.cfg"
 
         opts = [
             "--config",
@@ -32,7 +31,7 @@ class TestBaseCallModule(unittest.TestCase):
             "auto",
             "--log_path",
             self.log_path,
-            "--disable_pings"
+            "--disable_pings",
         ]
 
         self.guppy_server, self.guppy_port = run_server(self.GUPPY_EXEC, opts)
@@ -57,7 +56,6 @@ class TestBaseCallModule(unittest.TestCase):
         rmtree(self.log_path)
 
     def test_identification(self):
-
         def run_main(gport, mport):
             read_until.examples.identification.main(
                 [

@@ -26,17 +26,27 @@ check.version:
       fi
   only: ["tags"]
 
-check.black:
+check.pre-commit:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
+  tags:
+    - linux
+    - docker
   script:
-    - pip install black==19.10b0
-    - black --check --diff read_until/*
+    - pip install pre-commit
+      # if any of the hooks wanted to modify files, this will have a non-zero exit
+    - pre-commit run --all-files
+  variables:
+    PRE_COMMIT_HOME: ${CI_PROJECT_DIR}/.cache/pre-commit
+  cache:
+    paths:
+      - ${PRE_COMMIT_HOME}
 
 check.pylint:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
+    # TODO: integrate this with pre-commit (after fixing all the issues)
     - pip install ${ONT_PYPI} -r requirements.txt
     - pip install -r dev-requirements.txt
     - python setup.py install
@@ -139,4 +149,3 @@ wheel upload:
       - pip install twine
       - twine upload ./dist/*.*
   only: ["tags"]
-
