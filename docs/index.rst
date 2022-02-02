@@ -27,5 +27,5 @@ Full API reference
 
 .. toctree::
    :maxdepth: 2
-      
-   read_until 
+
+   read_until

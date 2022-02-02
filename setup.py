@@ -17,9 +17,7 @@ setup(
     author_email="info@nanoporetech.com",
     description="Read Until API",
     install_requires=install_requires,
-    extra_requires={
-        "guppy": ["ont-pyguppy-client-lib>=4.0.8"],
-    },
+    extra_requires={"guppy": ["ont-pyguppy-client-lib>=4.0.8"],},
     tests_require=[],
     # don't include any testing subpackages in dist
     packages=find_packages(exclude=["*.test", "*.test.*", "test.*", "test"]),

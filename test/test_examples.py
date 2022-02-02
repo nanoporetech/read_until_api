@@ -1,13 +1,12 @@
 """Testing for example code"""
 
 import logging
-from minknow_api import data_pb2, Connection
+from minknow_api import data_pb2
 import numpy
 import random
 import sys
 from threading import Thread
 import time
-from unittest.mock import patch
 
 import read_until.examples.simple
 from .read_until_test_server import ReadUntilTestServer
@@ -22,7 +21,16 @@ def test_example_simple():
     def example_main(test_server):
 
         read_until.examples.simple.main(
-            ["--host", "localhost", "--port", str(test_server.port), "--run_time", "30"]
+            [
+                "--host",
+                "localhost",
+                "--port",
+                str(test_server.port),
+                "--ca-cert",
+                str(test_server.ca_cert_path),
+                "--run_time",
+                "30",
+            ]
         )
 
     run_thread = Thread(target=example_main, args=(test_server,))
@@ -92,7 +100,16 @@ def test_example_simple_random():
 
     def example_main(test_server):
         read_until.examples.simple.main(
-            ["--host", "localhost", "--port", str(test_server.port), "--run_time", "60"]
+            [
+                "--host",
+                "localhost",
+                "--port",
+                str(test_server.port),
+                "--ca-cert",
+                str(test_server.ca_cert_path),
+                "--run_time",
+                "60",
+            ]
         )
 
     run_thread = Thread(target=example_main, args=(test_server,))

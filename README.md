@@ -1,29 +1,29 @@
 Read Until
 ==========
 
-Adaptive sampling enables a large number of applications, traditionally associated with complex 
-molecular biology methods, to be carried out by the sequencer itself.  Adaptive sampling enables 
-the following: 
+Adaptive sampling enables a large number of applications, traditionally associated with complex
+molecular biology methods, to be carried out by the sequencer itself.  Adaptive sampling enables
+the following:
 
-**Enrichment**:  Users can ask the system to enrich for strands that contain a target region of interest, a 
-haplotype of choice or an organism of interest against a complex background 
+**Enrichment**:  Users can ask the system to enrich for strands that contain a target region of interest, a
+haplotype of choice or an organism of interest against a complex background
 
 **Depletion**: Users can reject strands from an organism which is of no interest (e.g. host depletion).
-In the case of pathogen detection or microbiome applications in human health this could be enabled as a 
+In the case of pathogen detection or microbiome applications in human health this could be enabled as a
 "human filter" ensuring that this sensitive, confidential data is never committed to disk.
 
-**Balancing**: Users can use adaptive sampling to balance their barcodes, ensuring they achieve target 
-depths for each barcode and also even out coverage across a genome by rejecting strands representing 
+**Balancing**: Users can use adaptive sampling to balance their barcodes, ensuring they achieve target
+depths for each barcode and also even out coverage across a genome by rejecting strands representing
 regions of the genome already at their target depth in favour of regions that have lower coverage.
 
-The read until API is provided "as is" as a research tool. Issue reporting has been disabled on the 
-github website; users with questions should go to the Nanopore community and post comments 
-[here](https://community.nanoporetech.com/posts/adaptive-sampling-release). Usage currently requires 
-some advanced programming capability. Efforts are ongoing by the Oxford Nanopore team to release simpler 
+The read until API is provided "as is" as a research tool. Issue reporting has been disabled on the
+github website; users with questions should go to the Nanopore community and post comments
+[here](https://community.nanoporetech.com/posts/adaptive-sampling-release). Usage currently requires
+some advanced programming capability. Efforts are ongoing by the Oxford Nanopore team to release simpler
 versions of this tool enabling more and more users to deploy it successfully.
 
-Please add new feature requests to the 
-[feature request pinboard](https://community.nanoporetech.com/posts/ideas-and-suggestions-port) under the 
+Please add new feature requests to the
+[feature request pinboard](https://community.nanoporetech.com/posts/ideas-and-suggestions-port) under the
 tag "Adaptive Sampling".
 
 The Read Until API provides a mechanism for an application to connect to a
@@ -92,8 +92,8 @@ The second queue is more elaborate, it is implemented in
 for analysis. The queue is additionally keyed on channel such that it only ever
 stores a single chunk from each sequencer channel; thereby protecting consumers
 of the client from reads which have already ended. An extended cache `AccumulatingCache`
-is also provided in `read_until.read_cache` that combines raw data chunks from the 
-same read. Developers should read the code and comments in the to better understand how 
+is also provided in `read_until.read_cache` that combines raw data chunks from the
+same read. Developers should read the code and comments in the to better understand how
 these caches work.
 
 For many developers the details of these queues may be unimportant, at least in
