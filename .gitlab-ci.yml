@@ -97,10 +97,6 @@ check.test.python36:
   <<: *test_skeleton
   image: python:3.6-buster
 
-check.test.python35:
-  <<: *test_skeleton
-  image: python:3.5-buster
-
 test_id_example:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
