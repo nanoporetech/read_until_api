@@ -1,2 +1,2 @@
 numpy~=1.17
-minknow-api>=5.0.0rc1,==5.*
+minknow-api>=5.1.0rc1,==5.*
