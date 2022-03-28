@@ -162,9 +162,12 @@ class ReadUntilClient(object):
         self.last_channel = self.channel_count
 
         # Get read classifications
-        self.classes = (
-            self.connection.analysis_configuration.get_read_classifications().read_classifications
+        read_classifiers = (
+            self.connection.analysis_configuration.get_read_classifications()
         )
+        self.lookup_read_class = {
+            v: k for (k, v,) in read_classifiers.read_classifications.items()
+        }
 
         # Get calibration values
         self.calibration_data = self.connection.device.get_calibration(
@@ -196,7 +199,7 @@ class ReadUntilClient(object):
         )
 
         self.strand_classes = set(
-            k for k in self.classes if self.classes[k] in self.prefilter_classes
+            self.lookup_read_class[x] for x in self.prefilter_classes
         )
 
         self.logger.debug("Strand-like classes are %s.", self.strand_classes)
@@ -445,6 +448,7 @@ class ReadUntilClient(object):
         min_chunk_size=ALLOWED_MIN_CHUNK_SIZE,
         max_unblock_read_length_samples=None,
         max_unblock_read_length_seconds=None,
+        accepted_first_chunk_classifications=None,
     ):
         """Yield the stream initializer request followed by action requests
         placed into the action_queue.
@@ -456,7 +460,9 @@ class ReadUntilClient(object):
             attempt to unblock (in samples).
         :param max_unblock_read_length_seconds: Maximum read length MinKNOW will
             attempt to unblock (in seconds).
-
+        :param accepted_first_chunk_classifications (list of str): If specified,
+            minknow will only stream reads that start with one of these
+            classifications. All others will be _accepted_ + not streamed
         """
         setup = {}
         # This allows the channels to default to all available channels on the
@@ -469,6 +475,11 @@ class ReadUntilClient(object):
         setup["first_channel"] = first_channel
         setup["last_channel"] = last_channel
         setup["raw_data_type"] = self.calibration
+
+        if accepted_first_chunk_classifications:
+            setup["accepted_first_chunk_classifications"] = [
+                self.lookup_read_class[k] for k in accepted_first_chunk_classifications
+            ]
 
         # see note at top of this module
         if min_chunk_size > ALLOWED_MIN_CHUNK_SIZE:
@@ -493,12 +504,7 @@ class ReadUntilClient(object):
         else:
             setup["max_unblock_read_length_samples"] = 0
 
-        self.logger.info(
-            "Sending init command, channels:%s-%s, min_chunk:%s",
-            first_channel,
-            last_channel,
-            min_chunk_size,
-        )
+        self.logger.info("Sending init command, parameters: %s", setup)
         yield data_pb2.GetLiveReadsRequest(
             setup=data_pb2.GetLiveReadsRequest.StreamSetup(**setup)
         )

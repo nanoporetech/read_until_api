@@ -53,16 +53,20 @@ def test_setup(calibrated, expected_calibrated):
     )
 
     try:
-        client.run(first_channel=4, last_channel=100)
+        client.run(
+            first_channel=4,
+            last_channel=100,
+            accepted_first_chunk_classifications=["strand"],
+        )
 
         wait_until(lambda: len(test_server.data_service.live_reads_requests) > 0)
         assert test_server.data_service.live_reads_requests
-        assert test_server.data_service.live_reads_requests[0].setup.first_channel == 4
-        assert test_server.data_service.live_reads_requests[0].setup.last_channel == 100
-        assert (
-            test_server.data_service.live_reads_requests[0].setup.raw_data_type
-            == expected_calibrated
-        )
+
+        setup = test_server.data_service.live_reads_requests[0].setup
+        assert setup.first_channel == 4
+        assert setup.last_channel == 100
+        assert setup.accepted_first_chunk_classifications == [83]
+        assert setup.raw_data_type == expected_calibrated
 
     finally:
         client.reset()
