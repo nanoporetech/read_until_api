@@ -78,9 +78,10 @@ class DataService(data_pb2_grpc.DataServiceServicer):
         """
         self.live_reads_responses_to_send.put(response)
 
-    def terminate_live_reads(self):
-        """Terminate one open live reads stream."""
-        self._live_reads_terminate.put(None)
+    def terminate_live_reads(self, error_code=None):
+        """Terminate one open live reads stream. if error is passed,
+        that error code will be raised as a GRPC Exception"""
+        self._live_reads_terminate.put(error_code)
 
     def get_data_types(self, request: data_pb2.GetDataTypesRequest, context):
         """Get the data types available from this service"""
@@ -119,8 +120,10 @@ class DataService(data_pb2_grpc.DataServiceServicer):
         while request_thread.is_alive():
             # If we have been asked to exit then abort
             try:
-                self._live_reads_terminate.get(block=False)
+                resp = self._live_reads_terminate.get(block=False)
                 LOGGER.info("Exiting get_live_reads due to terminate request")
+                if resp:
+                    _context.set_code(resp)
                 return
             except Empty:
                 pass
