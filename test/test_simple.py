@@ -1,8 +1,11 @@
 """Test simple read until functionality"""
 
+import time
 import numpy
 import pytest
+import grpc
 
+from unittest.mock import patch
 import read_until
 from minknow_api import data_pb2
 
@@ -67,6 +70,53 @@ def test_setup(calibrated, expected_calibrated):
     finally:
         client.reset()
         test_server.stop(0)
+
+
+@patch("read_until.base.logging")
+def test_no_error_on_stream_cancel(mock_logging):
+    """ If the stream is asked to be cancelled, ensure there's no error level
+    warning message as it isn't an error. """
+
+    test_server = ReadUntilTestServer()
+    test_server.start()
+
+    client = read_until.ReadUntilClient(
+        mk_host="localhost",
+        mk_port=test_server.port,
+        mk_credentials=test_server.channel_credentials,
+    )
+
+    client.run(first_channel=1, last_channel=2)
+    test_server.data_service.terminate_live_reads(grpc.StatusCode.CANCELLED)
+    time.sleep(1)
+
+    # Check there isn't an exception level, and there is an info level
+    mock_logging.getLogger().exception.assert_not_called()
+    mock_logging.getLogger().info.assert_called_with(
+        "Read stream finished due to StatusCode.CANCELLED"
+    )
+
+
+@patch("read_until.base.logging")
+def test_error_on_stream_error(mock_logging):
+    """ If the stream is errored, ensure there's an error level log message. """
+
+    test_server = ReadUntilTestServer()
+    test_server.start()
+
+    client = read_until.ReadUntilClient(
+        mk_host="localhost",
+        mk_port=test_server.port,
+        mk_credentials=test_server.channel_credentials,
+    )
+
+    client.run(first_channel=1, last_channel=2)
+
+    test_server.data_service.terminate_live_reads(grpc.StatusCode.INTERNAL)
+    time.sleep(1)
+
+    # Make sure there's an exception level one
+    mock_logging.getLogger().exception.assert_called_with("Failed Processing reads:")
 
 
 def test_response():
