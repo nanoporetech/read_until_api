@@ -92,7 +92,9 @@ def test_no_error_on_stream_cancel(mock_logging):
 
     # Check there isn't an exception level, and there is an info level
     mock_logging.getLogger().exception.assert_not_called()
-    mock_logging.getLogger().info.assert_called_with("Read stream finished")
+    mock_logging.getLogger().info.assert_called_with(
+        "Read stream finished due to StatusCode.CANCELLED"
+    )
 
 
 @patch("read_until.base.logging")

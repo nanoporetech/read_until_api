@@ -435,7 +435,7 @@ class ReadUntilClient(object):
         except grpc.RpcError as exc:
             code = exc.code()
             if code in {code.CANCELLED, code.ABORTED, code.FAILED_PRECONDITION}:
-                self.logger.info("Read stream finished")
+                self.logger.info(f"Read stream finished due to {code}")
             else:
                 self.logger.exception("Failed Processing reads:")
         except Exception:  # pylint: disable=broad-except
