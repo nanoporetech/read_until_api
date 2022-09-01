@@ -18,5 +18,5 @@ repos:
       - id: black
         args:
           - '--target-version=py35'
-
+        additional_dependencies: ['click==8.0.4']
 # vi:et:sw=2:sts=2:
