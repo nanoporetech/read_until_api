@@ -1,3 +1,7 @@
+include:
+  - project: "IONDEV/tacklebox"
+    file: "gitlab_ci_templates/pre-commit.yml"
+
 variables:
   PYTHON_DOCKER_IMAGE: python:3.7-buster
   GIT_SUBMODULE_STRATEGY: recursive
@@ -27,20 +31,8 @@ check.version:
   only: ["tags"]
 
 check.pre-commit:
+  extends: .tacklebox pre-commit
   stage: check
-  image: ${PYTHON_DOCKER_IMAGE}
-  tags:
-    - linux
-    - docker
-  script:
-    - pip install pre-commit
-      # if any of the hooks wanted to modify files, this will have a non-zero exit
-    - pre-commit run --all-files
-  variables:
-    PRE_COMMIT_HOME: ${CI_PROJECT_DIR}/.cache/pre-commit
-  cache:
-    paths:
-      - ${PRE_COMMIT_HOME}
 
 check.pylint:
   stage: check
