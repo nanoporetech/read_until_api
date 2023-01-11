@@ -1,4 +1,5 @@
 include:
+  - template: "Workflows/Branch-Pipelines.gitlab-ci.yml"
   - project: "IONDEV/tacklebox"
     file: "gitlab_ci_templates/pre-commit.yml"
 
