@@ -144,6 +144,7 @@ wheel upload:
 # * GITHUB_SSH_PRIVATE_KEY_FILE (a file-type variable)
 # * GITHUB_USER_EMAIL
 # * GITHUB_USER_NAME
+# * GITHUB_HOST_KEY
 # * GITHUB_REMOTE
 
 mirror to GitHub (dry-run):
@@ -157,6 +158,8 @@ mirror to GitHub (dry-run):
     - apt-get update > /dev/null
     - apt-get install --yes --no-install-recommends git > /dev/null
     # setup SSH for git
+    - mkdir -p ~/.ssh
+    - echo ${GITHUB_HOST_KEY} >> ~/.ssh/known_hosts
     - eval $(ssh-agent -s)
     - chmod 400 "${GITHUB_SSH_PRIVATE_KEY_FILE}"  # required for ssh-add
     - ssh-add "${GITHUB_SSH_PRIVATE_KEY_FILE}"
@@ -167,6 +170,7 @@ mirror to GitHub (dry-run):
     - git fetch --unshallow
     - tacklebox/bin/git_mirror "${GITHUB_REMOTE}" --verbose --branch "dev" --tag-regex "v.+" --dry-run
   variables:
+    GITHUB_HOST_KEY: "[ssh.github.com]:443 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
     # note: we're doing SSH over port 443 to avoid firewall rules
     GITHUB_REMOTE: "ssh://git@ssh.github.com:443/nanoporetech/read_until_api.git"
 
