@@ -1,3 +1,8 @@
+include:
+  - template: "Workflows/Branch-Pipelines.gitlab-ci.yml"
+  - project: "IONDEV/tacklebox"
+    file: "gitlab_ci_templates/pre-commit.yml"
+
 variables:
   PYTHON_DOCKER_IMAGE: python:3.7-buster
   GIT_SUBMODULE_STRATEGY: recursive
@@ -27,20 +32,8 @@ check.version:
   only: ["tags"]
 
 check.pre-commit:
+  extends: .tacklebox pre-commit
   stage: check
-  image: ${PYTHON_DOCKER_IMAGE}
-  tags:
-    - linux
-    - docker
-  script:
-    - pip install pre-commit
-      # if any of the hooks wanted to modify files, this will have a non-zero exit
-    - pre-commit run --all-files
-  variables:
-    PRE_COMMIT_HOME: ${CI_PROJECT_DIR}/.cache/pre-commit
-  cache:
-    paths:
-      - ${PRE_COMMIT_HOME}
 
 check.pylint:
   stage: check
@@ -146,3 +139,47 @@ wheel upload:
       - pip install twine
       - twine upload ./dist/*.*
   only: ["tags"]
+
+# the mirror to GitHub jobs require the following CI environment variables:
+# * GITHUB_SSH_PRIVATE_KEY_FILE (a file-type variable)
+# * GITHUB_USER_EMAIL
+# * GITHUB_USER_NAME
+# * GITHUB_HOST_KEY
+# * GITHUB_REMOTE
+
+mirror to GitHub (dry-run):
+  stage: deploy
+  image: ${CI_REGISTRY}/traque/ont-docker-base/ont-base-ubuntu:20.04
+  needs: []
+  rules:
+    - when: manual
+  before_script:
+    # install git
+    - apt-get update > /dev/null
+    - apt-get install --yes --no-install-recommends git > /dev/null
+    # setup SSH for git
+    - mkdir -p ~/.ssh
+    - echo ${GITHUB_HOST_KEY} >> ~/.ssh/known_hosts
+    - eval $(ssh-agent -s)
+    - chmod 400 "${GITHUB_SSH_PRIVATE_KEY_FILE}"  # required for ssh-add
+    - ssh-add "${GITHUB_SSH_PRIVATE_KEY_FILE}"
+    # setup git identity
+    - git config --global user.email "${GITHUB_USER_EMAIL}"
+    - git config --global user.name "${GITHUB_USER_NAME}"
+  script:
+    - git fetch --unshallow
+    - tacklebox/bin/git_mirror "${GITHUB_REMOTE}" --verbose --branch "dev" --tag-regex "v.+" --dry-run
+  variables:
+    GITHUB_HOST_KEY: "[ssh.github.com]:443 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
+    # note: we're doing SSH over port 443 to avoid firewall rules
+    GITHUB_REMOTE: "ssh://git@ssh.github.com:443/nanoporetech/read_until_api.git"
+
+mirror to GitHub:
+  extends: mirror to GitHub (dry-run)
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+  script:
+    # this should be identical to the job above, but without the `--dry-run` argument
+    - git fetch --unshallow
+    - tacklebox/bin/git_mirror "${GITHUB_REMOTE}" --verbose --branch "dev" --tag-regex "v.+"
