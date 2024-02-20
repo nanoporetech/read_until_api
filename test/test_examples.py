@@ -48,8 +48,7 @@ def test_example_simple():
     for channel in range(channel_count):
         sample_length = random.randint(1000, 3000)
         input_read_response = data_pb2.GetLiveReadsResponse.ReadData(
-            id="test-read",
-            number=read_number,
+            id="test-read-" + str(read_number),
             start_sample=sample_number,
             chunk_start_sample=sample_number,
             chunk_length=sample_length,
@@ -122,8 +121,7 @@ def test_example_simple_random():
     for _ in range(read_count):
         sample_length = random.randint(1000, 3000)
         input_read_response = data_pb2.GetLiveReadsResponse.ReadData(
-            id="test-read",
-            number=read_number,
+            id="test-read-" + str(read_number),
             start_sample=sample_number,
             chunk_start_sample=sample_number,
             chunk_length=sample_length,

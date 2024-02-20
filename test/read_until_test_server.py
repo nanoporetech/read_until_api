@@ -152,11 +152,7 @@ class DataService(data_pb2_grpc.DataServiceServicer):
                     ):
                         matched = False
                         read_id = start_item.data.id
-                        read_number = start_item.data.start_sample
-                        matched = (
-                            read_id == data_item.data.id
-                            or read_number == data_item.data.start_sample
-                        )
+                        matched = read_id == data_item.data.id
 
                         # its possible a new read comes in before the first one is responded to
                         # so we dont get match

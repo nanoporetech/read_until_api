@@ -561,7 +561,7 @@ class ReadUntilClient(object):
                         self.logger.debug(
                             "Rereceived %s:%s after stop request.",
                             read_channel,
-                            read.number,
+                            read.id,
                         )
                         continue
                     self.stop_receiving_read(read_channel, read.id)
