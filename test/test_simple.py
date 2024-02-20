@@ -123,8 +123,7 @@ def test_response():
     """Test client response"""
     input_channel = 4
     input_read_response = data_pb2.GetLiveReadsResponse.ReadData(
-        id="test-read",
-        number=1,
+        id="test-read-1",
         start_sample=0,
         chunk_start_sample=0,
         chunk_length=100,
@@ -156,7 +155,7 @@ def test_response():
             assert channel == input_channel
             assert read.SerializeToString() == input_read_response.SerializeToString()
             read_count += 1
-            client.unblock_read(channel, read.number)
+            client.unblock_read(channel, read.id)
 
             wait_until(lambda: len(test_server.data_service.live_reads_requests) >= 2)
             break
@@ -165,7 +164,7 @@ def test_response():
         unblock_request = test_server.data_service.live_reads_requests[-1]
         assert len(unblock_request.actions.actions) == 1
         assert unblock_request.actions.actions[0].channel == input_channel
-        assert unblock_request.actions.actions[0].number == input_read_response.number
+        assert unblock_request.actions.actions[0].id == input_read_response.id
 
     finally:
         client.reset()
@@ -178,12 +177,12 @@ def test_response_reads_after_unblock():
     """Test client response for receiving more read chunks after a decision has been made"""
     test_server = ReadUntilTestServer()
     test_server.start()
+    test_read_name = "test-read-"
 
     def add_read(channel, read_number):
         input_read_response = data_pb2.GetLiveReadsResponse.ReadData(
-            id="test-read",
-            number=read_number,
-            start_sample=0,
+            id=test_read_name + str(read_number),
+            start_sample=read_number,
             chunk_start_sample=0,
             chunk_length=100,
             chunk_classifications=[83],
@@ -211,13 +210,17 @@ def test_response_reads_after_unblock():
 
         read_chunk_received = False
         done = False
+        cycle = 0
         while not done:
+            cycle += 1
+            if cycle > 1000000:
+                raise ValueError("too many cycles")
             for channel, read in client.get_read_chunks():
-                if channel == 1 and read.number == 1:
+                if channel == 1 and read.id == test_read_name + str(1):
                     assert not read_chunk_received
                     read_chunk_received = True
 
-                    client.unblock_read(channel, read.number)
+                    client.unblock_read(channel, read.id)
                     # Trigger a later read on this channel which shouldn't be received
                     add_read(channel=1, read_number=1)
                     # And one to kick the next loop off
@@ -227,14 +230,14 @@ def test_response_reads_after_unblock():
                         lambda: len(test_server.data_service.live_reads_responses) >= 3
                     )
 
-                if channel == 2 and read.number == 1:
+                if channel == 2 and read.id == test_read_name + str(1):
                     # Make sure new ones come through after unblock
                     add_read(channel=1, read_number=2)
                     wait_until(
                         lambda: len(test_server.data_service.live_reads_responses) >= 4
                     )
 
-                if channel == 1 and read.number == 2:
+                if channel == 1 and read.id == test_read_name + str(2):
                     done = True
 
         # Check that the read isn't still waiting
