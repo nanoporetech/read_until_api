@@ -33,12 +33,12 @@ def test_update_key():
     channel = 1
 
     for i in range(5):
-        _, read = generate_read(channel=channel, number=read_number + i)
+        _, read = generate_read(channel=channel, id=str(read_number + i))
         rc[channel] = read
 
     assert list(rc.keys()) == [channel], "Keys are wrong"
     assert len(rc) == 1, "Wrong number of entries"
-    assert rc[channel].number != read_number, "read might have not been updated"
+    assert rc[channel].id != str(read_number), "read might have not been updated"
 
 
 def test_order():
@@ -54,7 +54,7 @@ def test_order():
 
     # Move read 4 to end by updating
     channel = max_size - 1
-    _, read = generate_read(channel=channel, number=rc[channel].number + 1)
+    _, read = generate_read(channel=channel, id=rc[channel].id + "1")
     rc[channel] = read
     order.append(order.pop(channel - 1))
 
@@ -251,7 +251,7 @@ def test_attributes():
 
     # Fill the cache
     for c in range(1, max_size + 1):
-        channel, read = generate_read(channel=c, number=c)
+        channel, read = generate_read(channel=c, id=str(c))
         rc[channel] = read
 
     assert len(rc) == rc.size
@@ -259,17 +259,17 @@ def test_attributes():
     # Test missed
     # Refill all reads with different read numbers
     for c in range(1, max_size + 1):
-        channel, read = generate_read(channel=c, number=c + 1)
+        channel, read = generate_read(channel=c, id=str(c + 1))
         rc[channel] = read
 
     assert rc.missed == max_size, ".missed is wrong"
 
     # Test replaced
     for c in range(1, max_size + 1):
-        channel, read = generate_read(channel=c, number=c + 1)
+        channel, read = generate_read(channel=c, id=str(c + 1))
         rc[channel] = read
 
-    assert rc.replaced == max_size, ".replaces is wrong"
+    assert rc.replaced == max_size, ".replaced is wrong"
 
 
 def test_accumulating_setitem():
@@ -279,7 +279,7 @@ def test_accumulating_setitem():
     read_len = []
 
     # Normal set
-    channel, read = generate_read(channel=1, number=1)
+    channel, read = generate_read(channel=1, id=str(1))
     rc[channel] = read
 
     # log raw_data length
@@ -292,7 +292,7 @@ def test_accumulating_setitem():
     assert len(rc) == 2, "ReadCache has wrong size"
 
     # Same read, new chunk
-    channel, read = generate_read(channel=1, number=1)
+    channel, read = generate_read(channel=1, id=str(1))
     rc[channel] = read
 
     # log raw_data length
@@ -301,7 +301,7 @@ def test_accumulating_setitem():
     assert len(rc[1].raw_data) == sum(read_len)
 
     # New read for channel 1
-    channel, read = generate_read(channel=1, number=10)
+    channel, read = generate_read(channel=1, id=str(10))
     rc[channel] = read
 
     # Fill cache, test max_size
@@ -427,7 +427,7 @@ def test_accumulating_attributes():
     rc = AccumulatingCache(max_size)
 
     for c in range(1, max_size + 1):
-        channel, read = generate_read(channel=c, number=c)
+        channel, read = generate_read(channel=c, id=str(c))
         rc[channel] = read
 
     assert len(rc) == rc.size
@@ -437,14 +437,14 @@ def test_accumulating_attributes():
     # Test replaced
     # Refill with same channels and read numbers
     for c in range(1, max_size + 1):
-        channel, read = generate_read(channel=c, number=c)
+        channel, read = generate_read(channel=c, id=str(c))
         rc[channel] = read
 
     assert rc.replaced == max_size, ".replaced is wrong"
 
     # Test missed
     for c in range(1, max_size + 1):
-        channel, read = generate_read(channel=c, number=c + 1)
+        channel, read = generate_read(channel=c, id=str(c + 1))
         rc[channel] = read
 
     assert rc.missed == max_size, ".missed is wrong"

@@ -31,7 +31,6 @@ def generate_read(**kwargs):
     :type channel: int
     :param id: str
     :type id: Read ID to give the read
-    :type number: int
     :param start_sample: The start sample for the read
     :type start_sample: int
     :param chunk_start_sample: The read chunk start sample
