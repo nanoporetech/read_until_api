@@ -11,13 +11,17 @@ import numpy as np
 from read_until import AccumulatingCache, ReadUntilClient
 
 try:
-    from pyguppy_client_lib.pyclient import PyGuppyClient
-    from pyguppy_client_lib.helper_functions import package_read
+    from pybasecall_client_lib.pyclient import PyBasecallClient as PyGuppyClient
+    from pybasecall_client_lib.helper_functions import package_read
 except ImportError:
-    print(
-        "Failed to import pyguppy_client_lib, do you need to `pip install ont-pyguppy-client-lib`",
-        file=sys.stderr,
-    )
+    try:
+        from pyguppy_client_lib.pyclient import PyGuppyClient
+        from pyguppy_client_lib.helper_functions import package_read
+    except ImportError:
+        print(
+            "Failed to import pybasecall_client_lib, do you need to `pip install ont-pybasecall-client-lib`",
+            file=sys.stderr,
+        )
 
 
 def basecall(
@@ -41,7 +45,7 @@ def basecall(
 
     with guppy_client:
         for channel, read in reads:
-            hold[read.id] = (channel, read.number)
+            hold[read.id] = (channel, read.id)
             t0 = time.time()
             success = guppy_client.pass_read(
                 package_read(
