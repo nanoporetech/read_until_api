@@ -74,7 +74,6 @@ class DataService(data_pb2_grpc.DataServiceServicer):
     def _read_data_generator(self):
         """Generate a (channel, ReadData) tuple, using random numbers
         """
-        read_number = 1
         sample_number = 0
         for channel in range(self.first, self.last + 1):
             # 40% chance of skipping a read, simulates sparse read data
@@ -84,7 +83,6 @@ class DataService(data_pb2_grpc.DataServiceServicer):
             sample_length = random.randint(1000, 3000)
             defaults = data_pb2.GetLiveReadsResponse.ReadData(
                 id=str(uuid4()),
-                number=read_number,
                 start_sample=sample_number,
                 chunk_start_sample=sample_number,
                 chunk_length=sample_length,
@@ -97,7 +95,6 @@ class DataService(data_pb2_grpc.DataServiceServicer):
             )
 
             yield channel, defaults
-            read_number += random.randint(1, 4)
             sample_number += random.randint(1, 10000)
 
     def request_handler(self, iterator):
