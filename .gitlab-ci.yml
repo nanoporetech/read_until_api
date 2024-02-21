@@ -93,7 +93,7 @@ test_id_example:
     - if [ ! -z ${GUPPY_ARCHIVE} ]; then
         curl -kL ${GUPPY_ARCHIVE} > guppy.tar.gz;
         tar -xf guppy.tar.gz;
-        export PATH=${PWD}/ont-guppy-cpu/bin:${PWD}/ont-guppy/bin:$PATH;
+        export PATH=${PWD}/ont-dorado-server/bin:${PWD}/ont-guppy/bin:$PATH;
       fi
     - pip install ${ONT_PYPI} -r requirements.txt
     - pip install ${ONT_PYPI} ${PYGUPPY_INSTALL}
