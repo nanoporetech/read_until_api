@@ -9,7 +9,7 @@ variables:
   GUPPY_VERSION: 7.2.13
   PYGUPPY_INSTALL: ont-pybasecall-client-lib==${GUPPY_VERSION}
   GUPPY_ARCHIVE: ${ARTIFACTORY_URL}/artifactory/OFAN-General/release/${GUPPY_VERSION}/ont-dorado-server_${GUPPY_VERSION}_linux64.tar.gz
-  ONT_PYPI: "--extra-index-url ${ARTIFACTORY_URL}/artifactory/api/pypi/ONTDev-Pypi/simple ${ARTIFACTORY_URL}/artifactory/api/pypi/ONT-Pypi/simple --trusted-host ${ARTIFACTORY_HOST}"
+  ONT_PYPI: "--extra-index-url ${ARTIFACTORY_URL}/artifactory/api/pypi/ONTDev-Pypi/simple --extra-index-url ${ARTIFACTORY_URL}/artifactory/api/pypi/ONT-Pypi/simple --trusted-host ${ARTIFACTORY_HOST}"
 
 stages:
   - check
