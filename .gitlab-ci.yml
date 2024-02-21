@@ -6,9 +6,9 @@ include:
 variables:
   PYTHON_DOCKER_IMAGE: python:3.7-buster
   GIT_SUBMODULE_STRATEGY: recursive
-  GUPPY_VERSION: 4.2.3
-  PYGUPPY_INSTALL: ont-pyguppy-client-lib==${GUPPY_VERSION}
-  GUPPY_ARCHIVE: ${ARTIFACTORY_URL}/artifactory/OFAN-General/release/${GUPPY_VERSION}/ont-guppy-cpu_${GUPPY_VERSION}_linux64.tar.gz
+  GUPPY_VERSION: 7.2.13
+  PYGUPPY_INSTALL: ont-pybasecall-client-lib==${GUPPY_VERSION}
+  GUPPY_ARCHIVE: ${ARTIFACTORY_URL}/artifactory/OFAN-General/release/${GUPPY_VERSION}/ont-dorado-server_${GUPPY_VERSION}_linux64.tar.gz
   ONT_PYPI: "--extra-index-url ${ARTIFACTORY_URL}/artifactory/api/pypi/ONTDev-Pypi/simple --trusted-host ${ARTIFACTORY_HOST}"
 
 stages:
