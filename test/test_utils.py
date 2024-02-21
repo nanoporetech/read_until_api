@@ -31,8 +31,6 @@ def generate_read(**kwargs):
     :type channel: int
     :param id: str
     :type id: Read ID to give the read
-    :param number: Number to give the read. Two chunks with the same number and
-        channel are considered the same read.
     :type number: int
     :param start_sample: The start sample for the read
     :type start_sample: int
@@ -61,7 +59,6 @@ def generate_read(**kwargs):
     sample_number = 0
     defaults = dict(
         id=str(uuid.uuid4()),
-        number=random.randint(1, 10000),
         start_sample=sample_number,
         chunk_start_sample=sample_number,
         chunk_length=sample_length,
