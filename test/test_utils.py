@@ -98,13 +98,13 @@ def run_server(bin_path, options):
         universal_newlines=True,
     )
 
-    pattern = re.compile(r"Starting server on port: (\d+)")
+    pattern = re.compile(r"Starting server on port: (.*)")
 
     port = 0
 
     for line in server.stdout:
         if pattern.findall(line):
-            port = int(pattern.findall(line)[0])
+            port = pattern.findall(line)[0]
             break
 
         if not line:
