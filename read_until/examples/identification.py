@@ -53,6 +53,8 @@ def basecall(
                     raw_data=np.frombuffer(read.raw_data, dtype),
                     daq_offset=daq_values[channel].offset,
                     daq_scaling=daq_values[channel].scaling,
+                    start_time=int(read.start_sample),
+                    sampling_rate=4000,
                 )
             )
             if not success:
