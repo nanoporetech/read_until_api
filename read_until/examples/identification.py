@@ -77,7 +77,11 @@ def basecall(
                 continue
 
             yield from iter(
-                [(hold[read["metadata"]["read_id"]], read) for read in results]
+                [
+                    (hold[readx["metadata"]["read_id"]], readx)
+                    for reads in results
+                    for readx in reads
+                ]
             )
 
 
@@ -105,7 +109,7 @@ def get_parser():
         "--guppy_host", default="127.0.0.1", help="Guppy server host address",
     )
     parser.add_argument(
-        "--guppy_port", type=int, default=5555, help="Guppy server port",
+        "--guppy_port", type=str, default="5555", help="Guppy server port",
     )
     parser.add_argument(
         "--guppy_config", default="dna_r9.4.1_450bps_fast", help="Guppy server config",
@@ -229,10 +233,15 @@ def main(argv=None):
     if args.batch_size is None:
         args.batch_size = read_until_client.channel_count
 
+    if ":" in args.guppy_port:
+        guppy_connection = args.guppy_port
+    else:
+        guppy_connection = "{}:{}".format(args.guppy_host, args.guppy_port)
+
     caller = PyGuppyClient(
-        address="{}:{}".format(args.guppy_host, args.guppy_port),
+        address="{}".format(guppy_connection),
         config=args.guppy_config,
-        alignment_index_file=args.alignment_index_file,
+        align_ref=args.alignment_index_file,
         bed_file=args.bed_file if args.bed_file else "",
         barcode_kits=args.barcodes,
         server_file_load_timeout=180,  # 180 == 3 minutes, should be enough?
