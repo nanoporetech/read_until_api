@@ -47,16 +47,28 @@ def basecall(
         for channel, read in reads:
             hold[read.id] = (channel, read.id)
             t0 = time.time()
-            success = guppy_client.pass_read(
-                package_read(
-                    read_id=read.id,
-                    raw_data=np.frombuffer(read.raw_data, dtype),
-                    daq_offset=daq_values[channel].offset,
-                    daq_scaling=daq_values[channel].scaling,
-                    start_time=int(read.start_sample),
-                    sampling_rate=4000.0,
+            try:
+                # pybasecall_client
+                success = guppy_client.pass_read(
+                    package_read(
+                        read_id=read.id,
+                        raw_data=np.frombuffer(read.raw_data, dtype),
+                        daq_offset=daq_values[channel].offset,
+                        daq_scaling=daq_values[channel].scaling,
+                        start_time=int(read.start_sample),
+                        sampling_rate=4000.0,
+                    )
                 )
-            )
+            except TypeError:
+                # pyguppy client
+                success = guppy_client.pass_read(
+                    package_read(
+                        read_id=read.id,
+                        raw_data=np.frombuffer(read.raw_data, dtype),
+                        daq_offset=daq_values[channel].offset,
+                        daq_scaling=daq_values[channel].scaling,
+                    )
+                )
             if not success:
                 logging.warning("Skipped a read: {}".format(read.id))
                 hold.pop(read.id)

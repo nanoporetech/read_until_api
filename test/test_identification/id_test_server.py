@@ -201,9 +201,9 @@ def main():
 
     try:
         with server as TestServer:
-            GUPPY_EXEC = which("dorado_basecall_server")
+            GUPPY_EXEC = which("guppy_basecall_server")
             if GUPPY_EXEC is None:
-                logging.warning("dorado_basecall_server not found")
+                logging.warning("guppy_basecall_server not found")
 
             log_path = tempfile.mkdtemp()
             config = "dna_r9.4.1_450bps_fast.cfg"

@@ -6,10 +6,10 @@ include:
 variables:
   PYTHON_DOCKER_IMAGE: python:3.7-buster
   GIT_SUBMODULE_STRATEGY: recursive
-  GUPPY_VERSION: 7.3.5
-  PYGUPPY_INSTALL: ont-pybasecall-client-lib==${GUPPY_VERSION}
-  GUPPY_ARCHIVE: ${ARTIFACTORY_URL}/artifactory/OFAN-General/release/${GUPPY_VERSION}/ont-dorado-server_${GUPPY_VERSION}_linux64.tar.gz
-  ONT_PYPI: "--extra-index-url ${ARTIFACTORY_URL}/artifactory/api/pypi/ONTDev-Pypi/simple --extra-index-url ${ARTIFACTORY_URL}/artifactory/api/pypi/ONT-Pypi/simple --trusted-host ${ARTIFACTORY_HOST}"
+  GUPPY_VERSION: 6.6.3
+  PYGUPPY_INSTALL: ont-pyguppy-client-lib==${GUPPY_VERSION}
+  GUPPY_ARCHIVE: ${ARTIFACTORY_URL}/artifactory/OFAN-General/release/${GUPPY_VERSION}/ont-guppy_cpu_${GUPPY_VERSION}_linux64.tar.gz
+  ONT_PYPI: "--extra-index-url ${ARTIFACTORY_URL}/artifactory/api/pypi/ONT-Pypi/simple --trusted-host ${ARTIFACTORY_HOST}"
 
 stages:
   - check
@@ -93,7 +93,7 @@ test_id_example:
     - if [ ! -z ${GUPPY_ARCHIVE} ]; then
         curl -kL ${GUPPY_ARCHIVE} > guppy.tar.gz;
         tar -xf guppy.tar.gz;
-        export PATH=${PWD}/ont-dorado-server/bin:${PWD}/ont-guppy/bin:$PATH;
+        export PATH=${PWD}/ont-guppy-cpu/bin:${PWD}/ont-guppy/bin:$PATH;
       fi
     - pip install ${ONT_PYPI} -r requirements.txt
     - pip install ${ONT_PYPI} ${PYGUPPY_INSTALL}
