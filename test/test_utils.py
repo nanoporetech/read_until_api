@@ -31,9 +31,6 @@ def generate_read(**kwargs):
     :type channel: int
     :param id: str
     :type id: Read ID to give the read
-    :param number: Number to give the read. Two chunks with the same number and
-        channel are considered the same read.
-    :type number: int
     :param start_sample: The start sample for the read
     :type start_sample: int
     :param chunk_start_sample: The read chunk start sample
@@ -61,7 +58,6 @@ def generate_read(**kwargs):
     sample_number = 0
     defaults = dict(
         id=str(uuid.uuid4()),
-        number=random.randint(1, 10000),
         start_sample=sample_number,
         chunk_start_sample=sample_number,
         chunk_length=sample_length,
@@ -102,13 +98,13 @@ def run_server(bin_path, options):
         universal_newlines=True,
     )
 
-    pattern = re.compile(r"Starting server on port: (\d+)")
+    pattern = re.compile(r"Starting server on port: (.*)")
 
     port = 0
 
     for line in server.stdout:
         if pattern.findall(line):
-            port = int(pattern.findall(line)[0])
+            port = pattern.findall(line)[0]
             break
 
         if not line:

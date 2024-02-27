@@ -121,9 +121,9 @@ def simple_analysis(
                 read.median_before > read.median
                 and read.median_before - read.median > 60
             ):
-                client.stop_receiving_read(channel, read.number)
+                client.stop_receiving_read(channel, read.id)
             # we can also call the following for reads we don't like
-            client.unblock_read(channel, read.number, duration=unblock_duration)
+            client.unblock_read(channel, read.id, duration=unblock_duration)
 
         # limit the rate at which we make requests
         time_end = time.time()
