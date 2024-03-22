@@ -64,9 +64,9 @@ check.docs:
     paths:
       - public
 
-.test_skeleton: &test_skeleton
+test_skeleton: &test_skeleton
   stage: check
-  image: ${PYTHON_DOCKER_IMAGE}
+  image: python:${PYTHON_VERSION}
   script:
     - pip install ${ONT_PYPI} -r requirements.txt
     - pip install -r dev-requirements.txt
@@ -77,14 +77,11 @@ check.docs:
       junit: ./junit.xml
     paths:
       - cov_html/
+  parallel:
+    matrix:
+      - PYTHON_VERSION: [ "3.8-bullseye", "3.9-bullseye", "3.10-bullseye", "3.11-bullseye", "3.12-bullseye" ]
 
-check.test.python38:
-  <<: *test_skeleton
-  image: python:3.8-buster
 
-check.test.python37:
-  <<: *test_skeleton
-  image: python:3.7-buster
 
 test_id_example:
   stage: check

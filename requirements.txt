@@ -1,2 +1,2 @@
-numpy~=1.26.4
+numpy~=1.24.4 # Latest available in python 3.8
 minknow-api>=6.0.0rc1,>=6.*
