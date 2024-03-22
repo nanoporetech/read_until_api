@@ -6,8 +6,8 @@ include:
 variables:
   PYTHON_DOCKER_IMAGE: python:3.12.2-bullseye
   GIT_SUBMODULE_STRATEGY: recursive
-  GUPPY_VERSION: 6.6.3
-  PYGUPPY_INSTALL: ont-pyguppy-client-lib==${GUPPY_VERSION}
+  BASECALLER_VERSION: 7.3.9
+  PYGUPPY_INSTALL: ont-pybasecall-client-lib==${BASECALLER_VERSION}
   GUPPY_ARCHIVE: ${ARTIFACTORY_URL}/artifactory/OFAN-General/release/${GUPPY_VERSION}/ont-guppy-cpu_${GUPPY_VERSION}_linux64.tar.gz
   ONT_PYPI: "--extra-index-url ${ARTIFACTORY_URL}/artifactory/api/pypi/ONT-Pypi/simple --trusted-host ${ARTIFACTORY_HOST}"
 
