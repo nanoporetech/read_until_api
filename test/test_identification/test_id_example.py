@@ -15,9 +15,9 @@ from .id_test_server import DataService, DIR
 class TestBaseCallModule(unittest.TestCase):
     def setUp(self):
         logging.basicConfig(level=logging.DEBUG)
-        self.GUPPY_EXEC = which("guppy_basecall_server")
-        if self.GUPPY_EXEC is None:
-            self.skipTest("guppy_basecall_server not found")
+        self.BASECALLER_EXEC = which("dorado_basecall_server")
+        if self.BASECALLER_EXEC is None:
+            self.skipTest("dorado_basecall_server not found")
 
         self.log_path = tempfile.mkdtemp()
         self.config = "dna_r9.4.1_450bps_fast.cfg"
@@ -32,7 +32,7 @@ class TestBaseCallModule(unittest.TestCase):
             "--disable_pings",
         ]
 
-        self.guppy_server, self.guppy_port = run_server(self.GUPPY_EXEC, opts)
+        self.guppy_server, self.guppy_port = run_server(self.BASECALLER_EXEC, opts)
 
         self.minknow_server = ReadUntilTestServer(data_service=DataService)
         self.minknow_port = self.minknow_server.port
