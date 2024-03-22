@@ -7,8 +7,8 @@ variables:
   PYTHON_DOCKER_IMAGE: python:3.12.2-bullseye
   GIT_SUBMODULE_STRATEGY: recursive
   BASECALLER_VERSION: 7.3.9
-  PYGUPPY_INSTALL: ont-pybasecall-client-lib==${BASECALLER_VERSION}
-  GUPPY_ARCHIVE: ${ARTIFACTORY_URL}/artifactory/OFAN-General/release/${GUPPY_VERSION}/ont-guppy-cpu_${GUPPY_VERSION}_linux64.tar.gz
+  PYBASECALLER_INSTALL: ont-pybasecall-client-lib==${BASECALLER_VERSION}
+  BASECALLER_ARCHIVE: ${ARTIFACTORY_URL}/artifactory/OFAN-General/release/${BASECALLER_VERSION}/ont-dorado-server_${BASECALLER_VERSION}_linux64.tar.gz
   ONT_PYPI: "--extra-index-url ${ARTIFACTORY_URL}/artifactory/api/pypi/ONT-Pypi/simple --trusted-host ${ARTIFACTORY_HOST}"
 
 stages:
@@ -56,7 +56,7 @@ check.docs:
   image: ${PYTHON_DOCKER_IMAGE}
   script:
     - pip install ${ONT_PYPI} -r requirements.txt
-    - pip install ${ONT_PYPI} ${PYGUPPY_INSTALL}
+    - pip install ${ONT_PYPI} ${PYBASECALLER_INSTALL}
     - pip install -r dev-requirements.txt
     - python setup.py install
     - sphinx-build -b html docs/ public
@@ -87,13 +87,13 @@ test_id_example:
   stage: check
   image: ${PYTHON_DOCKER_IMAGE}
   script:
-    - if [ ! -z ${GUPPY_ARCHIVE} ]; then
-        curl -kL ${GUPPY_ARCHIVE} > guppy.tar.gz;
-        tar -xf guppy.tar.gz;
-        export PATH=${PWD}/ont-guppy-cpu/bin:${PWD}/ont-guppy/bin:$PATH;
+    - if [ ! -z ${BASECALLER_ARCHIVE} ]; then
+        curl -kL ${BASECALLER_ARCHIVE} > basecaller.tar.gz;
+        tar -xf basecaller.tar.gz;
+        export PATH=${PWD}/ont-dorado-server/bin:${PWD}/ont-dorado-server/bin:$PATH;
       fi
     - pip install ${ONT_PYPI} -r requirements.txt
-    - pip install ${ONT_PYPI} ${PYGUPPY_INSTALL}
+    - pip install ${ONT_PYPI} ${PYBASECALLER_INSTALL}
     - pip install -r dev-requirements.txt
     - python setup.py develop
     - pytest --cov=read_until --cov-report html:cov_html --cov-report term --junitxml=./junit.xml
