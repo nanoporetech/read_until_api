@@ -1,2 +1,2 @@
-numpy~=1.17
-minknow-api>=5.0.0rc1,==5.*
+numpy~=1.26.4
+minknow-api>=6.0.0rc1,>=6.*
