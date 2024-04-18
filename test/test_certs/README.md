@@ -1,4 +1,3 @@
-`minknow_api.testutils` requires this directory to exist alongside the test code.
+Certificates for tests, used by `mock_server.py`.
 
-The certificate files are taken from the `python/test/test_certs` directory in the `minknow_api`
-project.
+Regenerate with the `generate.sh` script.
