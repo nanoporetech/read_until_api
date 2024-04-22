@@ -144,8 +144,6 @@ mirror to GitHub (dry-run):
   stage: deploy
   image: ${CI_REGISTRY}/traque/ont-docker-base/ont-base-ubuntu:20.04
   needs: []
-  rules:
-    - when: manual
   before_script:
     # install git
     - apt-get update > /dev/null
