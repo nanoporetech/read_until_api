@@ -2,12 +2,16 @@
 
 import argparse
 from collections import namedtuple
+from concurrent import futures
+import inspect
 import logging
+from pathlib import Path
 from queue import Queue, Empty
 import sys
 from threading import Thread
 import time
 import typing
+from typing import Optional
 
 import grpc
 from minknow_api import (
@@ -19,8 +23,9 @@ from minknow_api import (
     data_pb2_grpc,
     device_pb2,
     device_pb2_grpc,
+    instance_pb2,
+    instance_pb2_grpc,
 )
-from minknow_api.testutils import MockMinKNOWServer, find_test_certs_dir
 
 
 LOGGER = logging.getLogger(__name__)
@@ -215,21 +220,130 @@ class DeviceService(device_pb2_grpc.DeviceServiceServicer):
         )
 
 
-class ReadUntilTestServer(MockMinKNOWServer):
-    def __init__(self, port=0, **kwargs):
-        # Use default Services from here but allow overriding
-        defaults = dict(
-            acquisition_service=AcquisitionService,
-            analysis_configuration_service=AnalysisConfigurationService,
-            data_service=DataService,
-            device_service=DeviceService,
+class InstanceService(instance_pb2_grpc.InstanceServiceServicer):
+    """
+    The most basic implementation of InstanceServicerServicer.
+
+    get_version_info() must be implemented for minknow_api.Connection() to work.
+    """
+
+    def get_version_info(
+        self,
+        _request: instance_pb2.GetVersionInfoRequest,
+        _context: grpc.ServicerContext,
+    ) -> instance_pb2.GetVersionInfoResponse:
+        """Find the version information for the instance"""
+        return instance_pb2.GetVersionInfoResponse(
+            minknow=instance_pb2.GetVersionInfoResponse.MinknowVersion(
+                major=6, minor=0, patch=0, full="6.0.0"
+            )
         )
-        kwargs = {**defaults, **kwargs}
-        super().__init__(port, **kwargs)
-        self.ca_cert_path = find_test_certs_dir() / "ca.crt"
-        self.channel_credentials = grpc.ssl_channel_credentials(
-            root_certificates=self.ca_cert_path.read_bytes()
+
+
+TEST_CERTS_DIR = Path(__file__).parent / "test_certs"
+CA_PATH = TEST_CERTS_DIR / "ca.crt"
+SERVER_KEY_PATH = TEST_CERTS_DIR / "localhost.key"
+SERVER_CERT_PATH = TEST_CERTS_DIR / "localhost.crt"
+
+
+def channel_credentials() -> grpc.ChannelCredentials:
+    """Create a gRPC ChannelCredentials object using the test certificates."""
+    with open(CA_PATH, "rb") as ca_file:
+        return grpc.ssl_channel_credentials(root_certificates=ca_file.read())
+
+
+def _add_servicer_to_server(servicer: object, server: grpc.Server):
+    """Adds an arbitrary servicer to a grpc server.
+
+    The servicer must ultimately derive from the base servicer in the generated gRPC
+    code (eg: minknow_api.manager.ManagerServiceServicer for the manager service).
+    """
+    # first, find the adder function - we'll assume the base servicer is just below
+    # `object` in the class hierarchy
+    base_servicer_type = inspect.getmro(type(servicer))[-2]
+    pb2_grpc_module = inspect.getmodule(base_servicer_type)
+    adder_name = f"add_{base_servicer_type.__name__}_to_server"
+    adder = getattr(pb2_grpc_module, adder_name)
+    adder(servicer, server)
+
+
+class ReadUntilTestServer:
+    """
+    Runs a test gRPC server implementing the bits of MinKNOW's API relevant to Read
+    Until.
+
+    Args:
+        port: Listen on a fixed port (defaults to an automatically-assigned free port).
+        acquisition_service: Override the acquisition_service implementation.
+        analysis_configuration_service: Override the analysis_configuration_service
+            implementation.
+        data_service: Override the data_service implementation.
+        device_service: Override the device_service implementation.
+        instance_service: Override the instance_service implementation.
+
+    Attrs:
+        server (grpc.Server): The gRPC server.
+        port (int): The port the server is listening on.
+    """
+
+    def __init__(
+        self,
+        port: int = 0,
+        acquisition_service: Optional[
+            acquisition_pb2_grpc.AcquisitionServiceServicer
+        ] = None,
+        analysis_configuration_service: Optional[
+            analysis_configuration_pb2_grpc.AnalysisConfigurationServiceServicer
+        ] = None,
+        data_service: Optional[data_pb2_grpc.DataServiceServicer] = None,
+        device_service: Optional[device_pb2_grpc.DeviceServiceServicer] = None,
+        instance_service: Optional[instance_pb2_grpc.InstanceServiceServicer] = None,
+    ):
+        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
+
+        if acquisition_service is None:
+            acquisition_service = AcquisitionService()
+        self.acquisition_service = acquisition_service
+        _add_servicer_to_server(acquisition_service, self.server)
+
+        if analysis_configuration_service is None:
+            analysis_configuration_service = AnalysisConfigurationService()
+        self.analysis_configuration_service = analysis_configuration_service
+        _add_servicer_to_server(analysis_configuration_service, self.server)
+
+        if data_service is None:
+            data_service = DataService()
+        self.data_service = data_service
+        _add_servicer_to_server(data_service, self.server)
+
+        if device_service is None:
+            device_service = DeviceService()
+        self.device_service = device_service
+        _add_servicer_to_server(device_service, self.server)
+
+        if instance_service is None:
+            instance_service = InstanceService()
+        self.instance_service = instance_service
+        _add_servicer_to_server(instance_service, self.server)
+
+        with open(SERVER_KEY_PATH, "rb") as key_file:
+            key = key_file.read()
+        with open(SERVER_CERT_PATH, "rb") as cert_file:
+            cert = cert_file.read()
+        self.port = self.server.add_secure_port(
+            f"127.0.0.1:{port}", grpc.ssl_server_credentials([(key, cert)],),
         )
+        logging.info("gRPC server listening on %s", self.port)
+        self.server.start()
+        logging.info("gRPC server started")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        logging.info("gRPC server stopping")
+        self.server.stop(0)
+        logging.debug("gRPC server stopped")
 
 
 def main():

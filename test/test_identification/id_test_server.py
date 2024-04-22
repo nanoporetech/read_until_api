@@ -20,8 +20,6 @@ from minknow_api import (
 from ..read_until_test_server import ReadUntilTestServer
 from ..test_utils import run_server
 
-# from minknow_api.testutils import MockMinKNOWServer
-
 DIR = Path(__file__).parent.resolve()
 
 LOGGER = logging.getLogger(__name__)
@@ -193,14 +191,11 @@ def main():
     )
 
     args = parser.parse_args()
-    # Create a gRPC server
-    server = ReadUntilTestServer(args.port, data_service=DataService,)
-
-    # Add a response for a user to receive
-    # server.data_service.add_response(data_pb2.GetLiveReadsResponse())
 
     try:
-        with server as TestServer:
+        with ReadUntilTestServer(
+            port=args.port, data_service=DataService()
+        ) as TestServer:
             GUPPY_EXEC = which("guppy_basecall_server")
             if GUPPY_EXEC is None:
                 logging.warning("guppy_basecall_server not found")

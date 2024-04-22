@@ -1,0 +1,26 @@
+# CA certificate restrictions specified by https://support.apple.com/en-us/HT210176
+# RSA key size >= 2048
+# SHA2 algorithm (SHA1 based hash algorithms are banned)
+
+[ req ]
+prompt              = no
+default_bits        = 4096
+distinguished_name  = req_distinguished_name
+req_extensions      = req_extensions_section
+default_md          = sha256
+
+[ req_distinguished_name ]
+C   = GB
+ST  = Oxfordshire
+L   = Oxford
+O   = Oxford Nanopore Technologies plc
+OU  = MinKNOW RPCs Test (read_until_api)
+CN  = Root CA
+
+[ req_extensions_section ]
+keyUsage            = keyEncipherment, dataEncipherment
+subjectAltName      = @subject_alternative_name_section
+extendedKeyUsage    = serverAuth
+
+[ subject_alternative_name_section ]
+DNS.1   = Root CA

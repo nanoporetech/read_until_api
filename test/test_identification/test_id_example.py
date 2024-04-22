@@ -8,7 +8,7 @@ from threading import Thread
 import read_until.examples.identification
 
 from ..test_utils import run_server
-from ..read_until_test_server import ReadUntilTestServer
+from ..read_until_test_server import ReadUntilTestServer, CA_PATH
 from .id_test_server import DataService, DIR
 
 
@@ -34,9 +34,8 @@ class TestBaseCallModule(unittest.TestCase):
 
         self.guppy_server, self.guppy_port = run_server(self.BASECALLER_EXEC, opts)
 
-        self.minknow_server = ReadUntilTestServer(data_service=DataService)
+        self.minknow_server = ReadUntilTestServer(data_service=DataService())
         self.minknow_port = self.minknow_server.port
-        self.minknow_server.start()
         self.mmi_path = str(DIR / "test_ref.mmi")
         logging.debug("guppy on: {}".format(self.guppy_port))
 
@@ -47,7 +46,7 @@ class TestBaseCallModule(unittest.TestCase):
         time.sleep(2)
 
     def tearDown(self):
-        self.minknow_server.stop(0)
+        self.minknow_server.server.stop(0)
         self.guppy_server.stdout.close()
         self.guppy_server.kill()
         self.guppy_server.wait()
@@ -60,7 +59,7 @@ class TestBaseCallModule(unittest.TestCase):
                     "--port",
                     str(mport),
                     "--ca-cert",
-                    str(self.minknow_server.ca_cert_path),
+                    str(CA_PATH),
                     "--guppy_port",
                     str(gport),
                     "--run_time",

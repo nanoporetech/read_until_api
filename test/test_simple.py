@@ -9,7 +9,7 @@ from unittest.mock import patch
 import read_until
 from minknow_api import data_pb2
 
-from .read_until_test_server import ReadUntilTestServer
+from .read_until_test_server import ReadUntilTestServer, channel_credentials
 from .test_utils import wait_until
 
 
@@ -23,7 +23,7 @@ def test_bad_setup():
             read_until.ReadUntilClient(
                 mk_host="localhost",
                 mk_port=test_server.port + 1,
-                mk_credentials=test_server.channel_credentials,
+                mk_credentials=channel_credentials(),
             )
 
         # Bad prefilter_classes input
@@ -33,7 +33,7 @@ def test_bad_setup():
                 mk_port=test_server.port,
                 filter_strands=True,
                 prefilter_classes=4,
-                mk_credentials=test_server.channel_credentials,
+                mk_credentials=channel_credentials(),
             )
 
 
@@ -46,30 +46,33 @@ def test_bad_setup():
 )
 def test_setup(calibrated, expected_calibrated):
     """Test client setup messages"""
-    test_server = ReadUntilTestServer()
-    test_server.start()
-    client = read_until.ReadUntilClient(
-        mk_host="localhost",
-        mk_port=test_server.port,
-        calibrated_signal=calibrated,
-        mk_credentials=test_server.channel_credentials,
-    )
-
-    try:
-        client.run(first_channel=4, last_channel=100)
-
-        wait_until(lambda: len(test_server.data_service.live_reads_requests) > 0)
-        assert test_server.data_service.live_reads_requests
-        assert test_server.data_service.live_reads_requests[0].setup.first_channel == 4
-        assert test_server.data_service.live_reads_requests[0].setup.last_channel == 100
-        assert (
-            test_server.data_service.live_reads_requests[0].setup.raw_data_type
-            == expected_calibrated
+    with ReadUntilTestServer() as test_server:
+        client = read_until.ReadUntilClient(
+            mk_host="localhost",
+            mk_port=test_server.port,
+            calibrated_signal=calibrated,
+            mk_credentials=channel_credentials(),
         )
 
-    finally:
-        client.reset()
-        test_server.stop(0)
+        try:
+            client.run(first_channel=4, last_channel=100)
+
+            wait_until(lambda: len(test_server.data_service.live_reads_requests) > 0)
+            assert test_server.data_service.live_reads_requests
+            assert (
+                test_server.data_service.live_reads_requests[0].setup.first_channel == 4
+            )
+            assert (
+                test_server.data_service.live_reads_requests[0].setup.last_channel
+                == 100
+            )
+            assert (
+                test_server.data_service.live_reads_requests[0].setup.raw_data_type
+                == expected_calibrated
+            )
+
+        finally:
+            client.reset()
 
 
 @patch("read_until.base.logging")
@@ -77,46 +80,44 @@ def test_no_error_on_stream_cancel(mock_logging):
     """ If the stream is asked to be cancelled, ensure there's no error level
     warning message as it isn't an error. """
 
-    test_server = ReadUntilTestServer()
-    test_server.start()
+    with ReadUntilTestServer() as test_server:
+        client = read_until.ReadUntilClient(
+            mk_host="localhost",
+            mk_port=test_server.port,
+            mk_credentials=channel_credentials(),
+        )
 
-    client = read_until.ReadUntilClient(
-        mk_host="localhost",
-        mk_port=test_server.port,
-        mk_credentials=test_server.channel_credentials,
-    )
+        client.run(first_channel=1, last_channel=2)
+        test_server.data_service.terminate_live_reads(grpc.StatusCode.CANCELLED)
+        time.sleep(1)
 
-    client.run(first_channel=1, last_channel=2)
-    test_server.data_service.terminate_live_reads(grpc.StatusCode.CANCELLED)
-    time.sleep(1)
-
-    # Check there isn't an exception level, and there is an info level
-    mock_logging.getLogger().exception.assert_not_called()
-    mock_logging.getLogger().info.assert_called_with(
-        "Read stream finished due to StatusCode.CANCELLED"
-    )
+        # Check there isn't an exception level, and there is an info level
+        mock_logging.getLogger().exception.assert_not_called()
+        mock_logging.getLogger().info.assert_called_with(
+            "Read stream finished due to StatusCode.CANCELLED"
+        )
 
 
 @patch("read_until.base.logging")
 def test_error_on_stream_error(mock_logging):
     """ If the stream is errored, ensure there's an error level log message. """
 
-    test_server = ReadUntilTestServer()
-    test_server.start()
+    with ReadUntilTestServer() as test_server:
+        client = read_until.ReadUntilClient(
+            mk_host="localhost",
+            mk_port=test_server.port,
+            mk_credentials=channel_credentials(),
+        )
 
-    client = read_until.ReadUntilClient(
-        mk_host="localhost",
-        mk_port=test_server.port,
-        mk_credentials=test_server.channel_credentials,
-    )
+        client.run(first_channel=1, last_channel=2)
 
-    client.run(first_channel=1, last_channel=2)
+        test_server.data_service.terminate_live_reads(grpc.StatusCode.INTERNAL)
+        time.sleep(1)
 
-    test_server.data_service.terminate_live_reads(grpc.StatusCode.INTERNAL)
-    time.sleep(1)
-
-    # Make sure there's an exception level one
-    mock_logging.getLogger().exception.assert_called_with("Failed Processing reads:")
+        # Make sure there's an exception level one
+        mock_logging.getLogger().exception.assert_called_with(
+            "Failed Processing reads:"
+        )
 
 
 def test_response():
@@ -133,117 +134,120 @@ def test_response():
         median=150,
     )
 
-    test_server = ReadUntilTestServer()
-    test_server.start()
-    test_server.data_service.add_response(
-        data_pb2.GetLiveReadsResponse(channels={input_channel: input_read_response})
-    )
+    with ReadUntilTestServer() as test_server:
+        test_server.data_service.add_response(
+            data_pb2.GetLiveReadsResponse(channels={input_channel: input_read_response})
+        )
 
-    client = read_until.ReadUntilClient(
-        mk_host="localhost",
-        mk_port=test_server.port,
-        mk_credentials=test_server.channel_credentials,
-    )
+        client = read_until.ReadUntilClient(
+            mk_host="localhost",
+            mk_port=test_server.port,
+            mk_credentials=channel_credentials(),
+        )
 
-    try:
-        client.run(first_channel=4, last_channel=100)
+        try:
+            client.run(first_channel=4, last_channel=100)
 
-        wait_until(lambda: len(test_server.data_service.live_reads_requests) >= 1)
+            wait_until(lambda: len(test_server.data_service.live_reads_requests) >= 1)
 
-        read_count = 0
-        for channel, read in client.get_read_chunks():
-            assert channel == input_channel
-            assert read.SerializeToString() == input_read_response.SerializeToString()
-            read_count += 1
-            client.unblock_read(channel, read.id)
+            read_count = 0
+            for channel, read in client.get_read_chunks():
+                assert channel == input_channel
+                assert (
+                    read.SerializeToString() == input_read_response.SerializeToString()
+                )
+                read_count += 1
+                client.unblock_read(channel, read.id)
 
-            wait_until(lambda: len(test_server.data_service.live_reads_requests) >= 2)
-            break
-        assert read_count == 1
+                wait_until(
+                    lambda: len(test_server.data_service.live_reads_requests) >= 2
+                )
+                break
+            assert read_count == 1
 
-        unblock_request = test_server.data_service.live_reads_requests[-1]
-        assert len(unblock_request.actions.actions) == 1
-        assert unblock_request.actions.actions[0].channel == input_channel
-        assert unblock_request.actions.actions[0].id == input_read_response.id
+            unblock_request = test_server.data_service.live_reads_requests[-1]
+            assert len(unblock_request.actions.actions) == 1
+            assert unblock_request.actions.actions[0].channel == input_channel
+            assert unblock_request.actions.actions[0].id == input_read_response.id
 
-    finally:
-        client.reset()
+        finally:
+            client.reset()
 
-    assert test_server.data_service.find_response_times()[0] < 0.05  # 50ms round trip
-    test_server.stop(0)
+        assert (
+            test_server.data_service.find_response_times()[0] < 0.05
+        )  # 50ms round trip
 
 
 def test_response_reads_after_unblock():
     """Test client response for receiving more read chunks after a decision has been made"""
-    test_server = ReadUntilTestServer()
-    test_server.start()
-    test_read_name = "test-read-"
+    with ReadUntilTestServer() as test_server:
+        test_read_name = "test-read-"
 
-    def add_read(channel, read_number):
-        input_read_response = data_pb2.GetLiveReadsResponse.ReadData(
-            id=test_read_name + str(read_number),
-            start_sample=read_number,
-            chunk_start_sample=0,
-            chunk_length=100,
-            chunk_classifications=[83],
-            raw_data=numpy.random.random(100).astype(dtype="f4").tobytes(),
-            median_before=100,
-            median=150,
+        def add_read(channel, read_number):
+            input_read_response = data_pb2.GetLiveReadsResponse.ReadData(
+                id=test_read_name + str(read_number),
+                start_sample=read_number,
+                chunk_start_sample=0,
+                chunk_length=100,
+                chunk_classifications=[83],
+                raw_data=numpy.random.random(100).astype(dtype="f4").tobytes(),
+                median_before=100,
+                median=150,
+            )
+
+            test_server.data_service.add_response(
+                data_pb2.GetLiveReadsResponse(channels={channel: input_read_response})
+            )
+
+        client = read_until.ReadUntilClient(
+            mk_host="localhost",
+            mk_port=test_server.port,
+            one_chunk=False,
+            mk_credentials=channel_credentials(),
         )
 
-        test_server.data_service.add_response(
-            data_pb2.GetLiveReadsResponse(channels={channel: input_read_response})
-        )
+        try:
+            client.run(first_channel=1, last_channel=2)
 
-    client = read_until.ReadUntilClient(
-        mk_host="localhost",
-        mk_port=test_server.port,
-        one_chunk=False,
-        mk_credentials=test_server.channel_credentials,
-    )
+            add_read(channel=1, read_number=1)
+            wait_until(lambda: len(test_server.data_service.live_reads_requests) >= 1)
 
-    try:
-        client.run(first_channel=1, last_channel=2)
+            read_chunk_received = False
+            done = False
+            cycle = 0
+            while not done:
+                cycle += 1
+                if cycle > 1000000:
+                    raise ValueError("too many cycles")
+                for channel, read in client.get_read_chunks():
+                    if channel == 1 and read.id == test_read_name + str(1):
+                        assert not read_chunk_received
+                        read_chunk_received = True
 
-        add_read(channel=1, read_number=1)
-        wait_until(lambda: len(test_server.data_service.live_reads_requests) >= 1)
+                        client.unblock_read(channel, read.id)
+                        # Trigger a later read on this channel which shouldn't be received
+                        add_read(channel=1, read_number=1)
+                        # And one to kick the next loop off
+                        add_read(channel=2, read_number=1)
 
-        read_chunk_received = False
-        done = False
-        cycle = 0
-        while not done:
-            cycle += 1
-            if cycle > 1000000:
-                raise ValueError("too many cycles")
-            for channel, read in client.get_read_chunks():
-                if channel == 1 and read.id == test_read_name + str(1):
-                    assert not read_chunk_received
-                    read_chunk_received = True
+                        wait_until(
+                            lambda: len(test_server.data_service.live_reads_responses)
+                            >= 3
+                        )
 
-                    client.unblock_read(channel, read.id)
-                    # Trigger a later read on this channel which shouldn't be received
-                    add_read(channel=1, read_number=1)
-                    # And one to kick the next loop off
-                    add_read(channel=2, read_number=1)
+                    if channel == 2 and read.id == test_read_name + str(1):
+                        # Make sure new ones come through after unblock
+                        add_read(channel=1, read_number=2)
+                        wait_until(
+                            lambda: len(test_server.data_service.live_reads_responses)
+                            >= 4
+                        )
 
-                    wait_until(
-                        lambda: len(test_server.data_service.live_reads_responses) >= 3
-                    )
+                    if channel == 1 and read.id == test_read_name + str(2):
+                        done = True
 
-                if channel == 2 and read.id == test_read_name + str(1):
-                    # Make sure new ones come through after unblock
-                    add_read(channel=1, read_number=2)
-                    wait_until(
-                        lambda: len(test_server.data_service.live_reads_responses) >= 4
-                    )
+            # Check that the read isn't still waiting
+            assert client.get_read_chunks() == []
 
-                if channel == 1 and read.id == test_read_name + str(2):
-                    done = True
-
-        # Check that the read isn't still waiting
-        assert client.get_read_chunks() == []
-
-    finally:
-        client.reset()
-
-    test_server.stop(0)
+        finally:
+            client.reset()
