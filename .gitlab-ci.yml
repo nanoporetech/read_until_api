@@ -147,7 +147,7 @@ mirror to GitHub (dry-run):
   before_script:
     # install git
     - apt-get update > /dev/null
-    - apt-get install --yes --no-install-recommends git > /dev/null
+    - apt-get install --yes --no-install-recommends curl git > /dev/null
     # setup SSH for git
     - mkdir -p ~/.ssh
     - echo ${GITHUB_HOST_KEY} >> ~/.ssh/known_hosts
@@ -159,7 +159,7 @@ mirror to GitHub (dry-run):
     - git config --global user.name "${GITHUB_USER_NAME}"
   script:
     - git fetch --unshallow
-    - tacklebox/bin/git_mirror "${GITHUB_REMOTE}" --verbose --branch "dev" --tag-regex "v.+" --dry-run
+    - curl -LfsS https://git.oxfordnanolabs.local/IONDEV/tacklebox/-/raw/trunk/bin/git_mirror | bash -s -- "${GITHUB_REMOTE}" --verbose --branch "dev" --tag-regex "v.+" --dry-run
   variables:
     GITHUB_HOST_KEY: "[ssh.github.com]:443 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
     # note: we're doing SSH over port 443 to avoid firewall rules
@@ -173,4 +173,4 @@ mirror to GitHub:
   script:
     # this should be identical to the job above, but without the `--dry-run` argument
     - git fetch --unshallow
-    - tacklebox/bin/git_mirror "${GITHUB_REMOTE}" --verbose --branch "dev" --tag-regex "v.+"
+    - curl -LfsS https://git.oxfordnanolabs.local/IONDEV/tacklebox/-/raw/trunk/bin/git_mirror | bash -s -- "${GITHUB_REMOTE}" --verbose --branch "dev" --tag-regex "v.+"
